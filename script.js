@@ -450,7 +450,7 @@ function populateDashboardUI() {
 
 
 // --- Main Execution Block (moved to window.onload) ---
-window.onload = function() {
+ {
     // --- Chart.js Global Configuration ---
     Chart.defaults.font.family = 'Inter';
     Chart.defaults.plugins.legend.position = 'bottom';
