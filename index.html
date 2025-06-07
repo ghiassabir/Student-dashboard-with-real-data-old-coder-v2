@@ -322,19 +322,19 @@
                 console.log("Raw student mapping:", studentMappingRaw.length, "rows.");
 
                 let studentInfo = null;
-                let studentGmailIDForFilter = null; // Use this for filtering the main data feeds
+                let studentGmailIDForFilter = null; // Declare here to ensure scope
 
-                // Attempt to find student in studentMapping by email or Student ID
-                studentInfo = studentMappingRaw.find(s => s['Student Email_Canvas'] === studentIdentifier || s['StudentGmailID'] === studentIdentifier || s['StudentID_Canvas'] === studentIdentifier); // Check email, GmailID, and Canvas ID
+                // First, try to find student in studentMapping by email or Student ID
+                // Note: StudentEmail_Canvas is the column name in Student_Mapping
+                studentInfo = studentMappingRaw.find(s => s['Student Email_Canvas'] === studentIdentifier || s['Student ID_Canvas'] === studentIdentifier); 
 
                 if (studentInfo) {
-                    // If found in mapping, use the StudentGmailID from mapping for filtering other feeds
                     studentGmailIDForFilter = studentInfo['StudentGmailID']; // Use StudentGmailID from mapping
                     console.log(`Student '${studentIdentifier}' found in mapping. Using StudentGmailID: ${studentGmailIDForFilter}`);
                 } else {
-                    // If not found in mapping, assume the identifier is a StudentGmailID and proceed
+                    // If not found in mapping, assume the identifier *is* the StudentGmailID itself
                     studentGmailIDForFilter = studentIdentifier;
-                    console.warn(`Student identifier '${studentIdentifier}' not found in student mapping. Attempting to filter data directly by this StudentGmailID.`);
+                    console.warn(`Student identifier '${studentIdentifier}' not found in student mapping via Email or CanvasID. Attempting to filter data directly by this identifier as StudentGmailID.`);
                 }
                  
                 // Filter main data feeds by the determined studentGmailIDForFilter
@@ -1241,10 +1241,8 @@
             console.log("window.onload fired. Initiating dashboard setup.");
             window.setupEventListeners(); // Set up event listeners first
             
-            // Hardcode filtering by a confirmed StudentGmailID that has data in the main feeds
-            // This ensures initial data load without an email prompt.
-            // For a production environment, this would be passed securely (e.g., from LTI)
-            // or retrieved via a login.
+            // Initial load for a confirmed StudentGmailID from your data.
+            // This student ('aisha@example.com') has data in the main feeds.
             const studentGmailIdForInitialLoad = "aisha@example.com"; 
             console.log(`Initial dashboard load for student: ${studentGmailIdForInitialLoad}`);
             window.loadAndProcessData(studentGmailIdForInitialLoad);
