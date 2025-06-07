@@ -137,6 +137,8 @@
         const STUDENT_MAPPING_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=0&single=true&output=csv'; // Student_Mapping from Phase 2
 
         // --- GLOBAL DATA STORAGE ---
+        // Declare these using 'let' or 'const' ONCE at the very top level of the inline script
+        // and attach functions to `window` for global access.
         let currentStudentData = {};
         let ALL_DASHBOARD_QUESTIONS = [];
 
@@ -320,18 +322,17 @@
                 console.log("Raw student mapping:", studentMappingRaw.length, "rows.");
 
                 let studentInfo = null;
-                let studentGmailIDForFilter = null; // Changed to match CSV header
+                let studentGmailIDForFilter = null; // Use this for filtering the main data feeds
 
-                // First, try to find student in studentMapping by email or Student ID
-                studentInfo = studentMappingRaw.find(s => s['Student Email'] === studentIdentifier || s['Student ID_Canvas'] === studentIdentifier); // Check both email and canvas ID
+                // Attempt to find student in studentMapping by email or Student ID
+                studentInfo = studentMappingRaw.find(s => s['Student Email_Canvas'] === studentIdentifier || s['StudentGmailID'] === studentIdentifier || s['StudentID_Canvas'] === studentIdentifier); // Check email, GmailID, and Canvas ID
 
                 if (studentInfo) {
                     // If found in mapping, use the StudentGmailID from mapping for filtering other feeds
                     studentGmailIDForFilter = studentInfo['StudentGmailID']; // Use StudentGmailID from mapping
                     console.log(`Student '${studentIdentifier}' found in mapping. Using StudentGmailID: ${studentGmailIDForFilter}`);
                 } else {
-                    // If not found in mapping, assume the identifier is a StudentGmailID
-                    // This covers cases where the user directly inputs a StudentGmailID that isn't in Student_Mapping
+                    // If not found in mapping, assume the identifier is a StudentGmailID and proceed
                     studentGmailIDForFilter = studentIdentifier;
                     console.warn(`Student identifier '${studentIdentifier}' not found in student mapping. Attempting to filter data directly by this StudentGmailID.`);
                 }
@@ -564,12 +565,12 @@
                     if (subjectSkills.length > 0) {
                         const totalStudentAccuracy = subjectSkills.reduce((sum, s) => sum + s.score, 0);
                         const totalClassAccuracy = subjectSkills.reduce((sum, s) => sum + s.classAvg, 0);
-                        window.currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
-                        window.currentStudentData.overallSkillPerformance.studentAccuracy[index] = Math.round(totalStudentAccuracy / subjectSkills.length);
+                        currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
+                        currentStudentData.overallSkillPerformance.studentAccuracy[index] = Math.round(totalStudentAccuracy / subjectSkills.length);
                         currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = Math.round(totalClassAccuracy / subjectSkills.length);
                     } else {
-                         window.currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
-                         window.currentStudentData.overallSkillPerformance.studentAccuracy[index] = 0;
+                         currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
+                         currentStudentData.overallSkillPerformance.studentAccuracy[index] = 0;
                          currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = 0;
                     }
                 });
@@ -698,7 +699,7 @@
 
             try {
                 // Prompt for email ID on refresh
-                let studentEmail = prompt("Please enter your student email ID to refresh data (e.g., aisha.m@example.pk):");
+                let studentEmail = prompt("Please enter your student email ID to refresh data (e.g., aisha@example.com):");
                 if (!studentEmail) {
                     alert("Refresh cancelled. No email provided.");
                     return;
@@ -1240,12 +1241,13 @@
             console.log("window.onload fired. Initiating dashboard setup.");
             window.setupEventListeners(); // Set up event listeners first
             
-            // Hardcode filtering by a known StudentGmailID that has data in the main feeds
-            // This is the most reliable way to get data to show initially.
-            // Using 'aisha.m@example.pk' as it's present in AggregatedScores and QuestionDetails
-            const studentIdentifierForInitialLoad = "aisha.m@example.pk"; 
-            console.log(`Initial dashboard load for student: ${studentIdentifierForInitialLoad}`);
-            window.loadAndProcessData(studentIdentifierForInitialLoad);
+            // Hardcode filtering by a confirmed StudentGmailID that has data in the main feeds
+            // This ensures initial data load without an email prompt.
+            // For a production environment, this would be passed securely (e.g., from LTI)
+            // or retrieved via a login.
+            const studentGmailIdForInitialLoad = "aisha@example.com"; 
+            console.log(`Initial dashboard load for student: ${studentGmailIdForInitialLoad}`);
+            window.loadAndProcessData(studentGmailIdForInitialLoad);
         };
     </script>
 </body>
