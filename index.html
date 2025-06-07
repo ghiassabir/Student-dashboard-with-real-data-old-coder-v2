@@ -132,13 +132,11 @@
         console.log("Inline script starting execution.");
 
         // --- CONSTANTS FOR DATA FILE URLs ---
-        const AGGREGATED_SCORES_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSySYBO9YL3N4aUG3JEYZMQQIv9d1oSm3ba4Ty9Gt4SsGs2zmTS_k81rH3Qv41mZvClnayNcDpl_QbI/pub?gid=1890969747&single=true&output=csv'; // DashboardFeed_AggregatedScores from Phase 1 
-        const QUESTION_DETAILS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=822014112&single=true&output=csv'; // DashboardFeed_QuestionDetails from Phase 2 
-        const STUDENT_MAPPING_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=0&single=true&output=csv'; // Student_Mapping from Phase 2 
+        const AGGREGATED_SCORES_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSySYBO9YL3N4aUG3JEYZMQQIv9d1oSm3ba4Ty9Gt4SsGs2zmTS_k81rH3Qv41mZvClnayNcDpl_QbI/pub?gid=1890969747&single=true&output=csv'; // DashboardFeed_AggregatedScores from Phase 1
+        const QUESTION_DETAILS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=822014112&single=true&output=csv'; // DashboardFeed_QuestionDetails from Phase 2
+        const STUDENT_MAPPING_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=0&single=true&output=csv'; // Student_Mapping from Phase 2
 
         // --- GLOBAL DATA STORAGE ---
-        // These MUST be declared at the top-level of this inline script (global scope)
-        // and NOT inside any function, to be accessible by other functions directly or via `window.`
         let currentStudentData = {};
         let ALL_DASHBOARD_QUESTIONS = [];
 
@@ -322,33 +320,33 @@
                 console.log("Raw student mapping:", studentMappingRaw.length, "rows.");
 
                 let studentInfo = null;
-                let studentIdentifierForFilter = studentIdentifier; // Will be the actual ID or email used for filtering
+                let studentGmailIDForFilter = null; // Changed to match CSV header
 
-                // First, try to find student in studentMapping using the provided identifier (might be ID or Email)
-                studentInfo = studentMappingRaw.find(s => s['Student ID'] === studentIdentifier || s['Student Email'] === studentIdentifier);
+                // First, try to find student in studentMapping by email or Student ID
+                studentInfo = studentMappingRaw.find(s => s['Student Email'] === studentIdentifier || s['Student ID_Canvas'] === studentIdentifier); // Check both email and canvas ID
 
                 if (studentInfo) {
-                    // If found in mapping, use the Student ID from mapping for consistency in other feeds
-                    studentIdentifierForFilter = studentInfo['Student ID'];
-                    console.log(`Student '${studentIdentifier}' found in mapping. Using Student ID: ${studentIdentifierForFilter}`);
+                    // If found in mapping, use the StudentGmailID from mapping for filtering other feeds
+                    studentGmailIDForFilter = studentInfo['StudentGmailID']; // Use StudentGmailID from mapping
+                    console.log(`Student '${studentIdentifier}' found in mapping. Using StudentGmailID: ${studentGmailIDForFilter}`);
                 } else {
-                    // If not found in mapping, log a warning and proceed with the original identifier
-                    // This assumes the original identifier *might* be a valid 'Student ID' in other feeds.
-                    console.warn(`Student identifier '${studentIdentifier}' not found in student mapping. Attempting to filter data directly by this ID.`);
-                    // StudentInfo will remain null, so we'll need to derive name later
+                    // If not found in mapping, assume the identifier is a StudentGmailID
+                    // This covers cases where the user directly inputs a StudentGmailID that isn't in Student_Mapping
+                    studentGmailIDForFilter = studentIdentifier;
+                    console.warn(`Student identifier '${studentIdentifier}' not found in student mapping. Attempting to filter data directly by this StudentGmailID.`);
                 }
                  
-                // Filter main data feeds by the determined studentIdentifierForFilter
-                const studentAggregatedScores = aggregatedScoresRaw.filter(row => row['Student ID'] === studentIdentifierForFilter);
-                const studentQuestionDetails = questionDetailsRaw.filter(row => row['Student ID'] === studentIdentifierForFilter);
+                // Filter main data feeds by the determined studentGmailIDForFilter
+                const studentAggregatedScores = aggregatedScoresRaw.filter(row => row['StudentGmailID'] === studentGmailIDForFilter); // Filter by StudentGmailID
+                const studentQuestionDetails = questionDetailsRaw.filter(row => row['StudentGmailID'] === studentGmailIDForFilter); // Filter by StudentGmailID
                 
-                console.log(`Filtered data for final Student ID ${studentIdentifierForFilter}:`);
+                console.log(`Filtered data for final StudentGmailID ${studentGmailIDForFilter}:`);
                 console.log("Aggregated scores rows:", studentAggregatedScores.length);
                 console.log("Question details rows:", studentQuestionDetails.length);
 
                 // Initialize currentStudentData with default or derived values
                 window.currentStudentData = {
-                    name: (studentInfo && studentInfo['Student Name_Canvas']) || (studentAggregatedScores.length > 0 && studentAggregatedScores[0]['StudentFullName']) || `Student ${studentIdentifierForFilter}`,
+                    name: (studentInfo && studentInfo['StudentName_Canvas']) || (studentAggregatedScores.length > 0 && studentAggregatedScores[0]['StudentFullName']) || `Student ${studentIdentifierForFilter}`,
                     targetScore: (studentInfo && parseInt(studentInfo['StudentTargetScore'])) || 1400,
                     latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 0 },
                     timeSpent: { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"},
@@ -358,12 +356,12 @@
                     eocQuizzes: { reading: [], writing: [], math: [] },
                     khanAcademy: { reading: [], writing: [], math: [] },
                     skills: { reading: [], writing: [], math: [] },
-                    chapters: STATIC_CHAPTER_LISTS
+                    chapters: STATIC_CHAPTER_LISTS // Use global STATIC_CHAPTER_LISTS
                 };
 
                 // --- CHECK FOR NO DATA AFTER FILTERING ---
                 if (studentAggregatedScores.length === 0 && studentQuestionDetails.length === 0) {
-                     console.warn(`No data found for student ID ${studentIdentifierForFilter} in aggregated scores or question details. Displaying empty dashboard.`);
+                     console.warn(`No data found for student Gmail ID ${studentGmailIDForFilter} in aggregated scores or question details. Displaying empty dashboard.`);
                      document.getElementById('overview-kpis').innerHTML = `<p class="text-gray-600 text-center col-span-5">No data found for student ${window.currentStudentData.name}.</p>`;
                      window.populateDashboardUI(); // Render empty dashboard
                      return; // Exit here if no data
@@ -371,7 +369,7 @@
 
                 // --- Populate currentStudentData.latestScores, scoreTrend, timeSpent from Aggregated Scores ---
                 const latestTest = studentAggregatedScores
-                    .filter(row => row['Assessment Type'] === 'CB Practice Test' && row['Total Score'] && row['AttemptDate'])
+                    .filter(row => row['Assessment Type'] === 'CB Practice Test' && row['ScaledScore_Total'] && row['AttemptDate']) // Use ScaledScore_Total for check
                     .sort((a, b) => new Date(b['AttemptDate']) - new Date(a['AttemptDate']))[0];
 
                 if (latestTest) {
@@ -405,16 +403,16 @@
 
                 const timeSpentRow = studentAggregatedScores.find(row => row['Assessment Type'] === 'Time Spent'); // Find specific row for time spent
                 if (timeSpentRow) {
-                    window.currentStudentData.timeSpent.studentAvg = parseFloat(timeSpentRow['TimeSpent_Seconds']) / 60 || 0; // Assuming this is daily average in seconds
-                    window.currentStudentData.timeSpent.classAvg = parseFloat(timeSpentRow['ClassAverageTime_Seconds']) / 60 || 0; // Assuming this is daily average in seconds
-                    window.currentStudentData.timeSpent.studentUnit = "min / day";
-                    window.currentStudentData.timeSpent.classUnit = "min / day";
+                    window.currentStudentData.timeSpent.studentAvg = parseFloat(timeSpentRow['TimeSpent_Seconds']) / 60 || 0; // Assuming this is total seconds, convert to minutes
+                    window.currentStudentData.timeSpent.classAvg = parseFloat(timeSpentRow['ClassAverageTime_Seconds']) / 60 || 0; // Assuming this is total seconds, convert to minutes
+                    window.currentStudentData.timeSpent.studentUnit = "min / total"; // Clarify unit
+                    window.currentStudentData.timeSpent.classUnit = "min / total"; // Clarify unit
                 } else {
                     // Fallback if specific time spent row not found
                     window.currentStudentData.timeSpent.studentAvg = Math.round(studentAggregatedScores.reduce((sum, row) => sum + (parseFloat(row.TimeSpent_Seconds) || 0), 0) / (studentAggregatedScores.filter(row => row.TimeSpent_Seconds).length || 1) / 60);
                     window.currentStudentData.timeSpent.classAvg = Math.round(aggregatedScoresRaw.reduce((sum, row) => sum + (parseFloat(row.ClassAverageTime_Seconds) || 0), 0) / (aggregatedScoresRaw.filter(row => row.ClassAverageTime_Seconds).length || 1) / 60);
-                    window.currentStudentData.timeSpent.studentUnit = "min / assessment";
-                    window.currentStudentData.timeSpent.classUnit = "min / assessment";
+                    window.currentStudentData.timeSpent.studentUnit = "min / assessment avg"; // Clarify unit
+                    window.currentStudentData.timeSpent.classUnit = "min / assessment avg"; // Clarify unit
                 }
 
 
@@ -437,7 +435,7 @@
                     const isCorrect = (qRow.IsCorrect === true); // Use boolean directly
                     const explanation = qRow['Explanation'] || 'No explanation available.';
                     const yourTime = parseFloat(qRow['TimeSpentOnQuestion_Seconds']) || 0;
-                    const classAvgTime = parseFloat(qRow['ClassAveragePoints_Question']) || 0; // This should be ClassAverageTime_Question
+                    const classAvgTime = parseFloat(qRow['ClassAverageTime_Question_Seconds']) || 0; // Corrected header from ClassAveragePoints_Question
                     const source = qRow['AssessmentName'] || 'Unknown Source'; // Use AssessmentName as source for question details
                     const questionText = qRow['QuestionText_fromMetadata'] || `Question ${questionId}`;
 
@@ -568,11 +566,11 @@
                         const totalClassAccuracy = subjectSkills.reduce((sum, s) => sum + s.classAvg, 0);
                         window.currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
                         window.currentStudentData.overallSkillPerformance.studentAccuracy[index] = Math.round(totalStudentAccuracy / subjectSkills.length);
-                        window.currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = Math.round(totalClassAccuracy / subjectSkills.length);
+                        currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = Math.round(totalClassAccuracy / subjectSkills.length);
                     } else {
                          window.currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
                          window.currentStudentData.overallSkillPerformance.studentAccuracy[index] = 0;
-                         window.currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = 0;
+                         currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = 0;
                     }
                 });
 
@@ -699,11 +697,14 @@
             document.getElementById('refreshDataBtn').disabled = true;
 
             try {
-                // For now, hardcode filter to an ID that exists in data
-                // In a production environment, this would be passed securely (e.g., from LTI)
-                // or retrieved via a login.
-                const studentIdToUse = "A000"; // Using A000 as it has data in AggregatedScores
-                await window.loadAndProcessData(studentIdToUse); // Pass the ID directly
+                // Prompt for email ID on refresh
+                let studentEmail = prompt("Please enter your student email ID to refresh data (e.g., aisha.m@example.pk):");
+                if (!studentEmail) {
+                    alert("Refresh cancelled. No email provided.");
+                    return;
+                }
+                localStorage.setItem('dashboardStudentEmail', studentEmail); // Save for next time
+                await window.loadAndProcessData(studentEmail); // Pass the email directly for filtering
                 alert("Dashboard data refreshed successfully!");
             } catch (error) {
                 alert("Failed to refresh dashboard data. Check console for errors.");
@@ -1239,12 +1240,12 @@
             console.log("window.onload fired. Initiating dashboard setup.");
             window.setupEventListeners(); // Set up event listeners first
             
-            // Hardcode filtering by a known Student ID that has data in the main feeds
-            // This ensures initial data load. For a production environment, you would
-            // integrate a robust login/ID retrieval method.
-            const studentIdForInitialLoad = "A000"; // Based on your CSVs, A000 has data. 
-            console.log(`Initial dashboard load for student ID: ${studentIdForInitialLoad}`);
-            window.loadAndProcessData(studentIdForInitialLoad);
+            // Hardcode filtering by a known StudentGmailID that has data in the main feeds
+            // This is the most reliable way to get data to show initially.
+            // Using 'aisha.m@example.pk' as it's present in AggregatedScores and QuestionDetails
+            const studentIdentifierForInitialLoad = "aisha.m@example.pk"; 
+            console.log(`Initial dashboard load for student: ${studentIdentifierForInitialLoad}`);
+            window.loadAndProcessData(studentIdentifierForInitialLoad);
         };
     </script>
 </body>
