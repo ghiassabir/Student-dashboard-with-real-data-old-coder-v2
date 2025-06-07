@@ -137,8 +137,6 @@
         const STUDENT_MAPPING_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=0&single=true&output=csv'; // Student_Mapping from Phase 2
 
         // --- GLOBAL DATA STORAGE ---
-        // Declare these using 'let' or 'const' ONCE at the very top level of the inline script
-        // and attach functions to `window` for global access.
         let currentStudentData = {};
         let ALL_DASHBOARD_QUESTIONS = [];
 
@@ -307,6 +305,64 @@
             }
         };
 
+        // Helper to determine subject from skill tag
+        window.getSubjectFromSkillTag = function(skillTag) {
+            if (!skillTag) return 'unknown';
+            const normalizedTag = skillTag.toLowerCase();
+
+            // Check Math skills
+            if (normalizedTag.includes("math") ||
+                normalizedTag.includes("algebra") ||
+                normalizedTag.includes("geometry") ||
+                normalizedTag.includes("exponents") ||
+                normalizedTag.includes("percent") ||
+                normalizedTag.includes("rates") ||
+                normalizedTag.includes("ratio") ||
+                normalizedTag.includes("equations") ||
+                normalizedTag.includes("functions") ||
+                normalizedTag.includes("quadratics") ||
+                normalizedTag.includes("statistics") ||
+                normalizedTag.includes("trigonometry") ||
+                normalizedTag.includes("volume") ||
+                normalizedTag.includes("numbers") ||
+                normalizedTag.includes("data analysis")) {
+                return 'math';
+            }
+            // Check Writing skills
+            if (normalizedTag.includes("writing") ||
+                normalizedTag.includes("grammar") ||
+                normalizedTag.includes("punctuation") ||
+                normalizedTag.includes("sentence structure") ||
+                normalizedTag.includes("transitions") ||
+                normalizedTag.includes("verbs") ||
+                normalizedTag.includes("pronoun") ||
+                normalizedTag.includes("apostrophes") ||
+                normalizedTag.includes("modification") ||
+                normalizedTag.includes("parallel structure") ||
+                normalizedTag.includes("word pairs") ||
+                normalizedTag.includes("question marks") ||
+                normalizedTag.includes("specific focus")) {
+                return 'writing';
+            }
+            // Check Reading skills
+            if (normalizedTag.includes("reading") ||
+                normalizedTag.includes("vocabulary in context") ||
+                normalizedTag.includes("central ideas") ||
+                normalizedTag.includes("inference") ||
+                normalizedTag.includes("literal comprehension") ||
+                normalizedTag.includes("text structure") ||
+                normalizedTag.includes("purpose") ||
+                normalizedTag.includes("text completions") ||
+                normalizedTag.includes("command of evidence") ||
+                normalizedTag.includes("graphs") ||
+                normalizedTag.includes("charts") ||
+                normalizedTag.includes("paired passages")) {
+                return 'reading';
+            }
+            // Fallback if not found
+            return 'unknown';
+        }
+
         // --- MAIN DATA LOADING AND TRANSFORMATION ---
         window.loadAndProcessData = async function(studentIdentifier) {
             console.log("Starting data loading and processing for:", studentIdentifier);
@@ -345,6 +401,20 @@
                 // --- CHECK FOR NO DATA AFTER FILTERING ---
                 if (studentAggregatedScores.length === 0 && studentQuestionDetails.length === 0) {
                      console.warn(`No data found for student Gmail ID ${studentGmailIDForFilter} in aggregated scores or question details. Displaying empty dashboard.`);
+                     // Initialize with empty but valid structure for currentStudentData
+                     window.currentStudentData = {
+                        name: (studentInfo && studentInfo['StudentName_Canvas']) || `Student ${studentIdentifierForFilter}`,
+                        targetScore: (studentInfo && parseInt(studentInfo['StudentTargetScore'])) || 1400,
+                        latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 0 },
+                        timeSpent: { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"},
+                        scoreTrend: { labels: [], studentScores: [], classAvgScores: [] },
+                        overallSkillPerformance: { labels: ['Reading', 'Writing', 'Math'], studentAccuracy: [0, 0, 0], classAvgAccuracy: [0, 0, 0] },
+                        cbPracticeTests: [],
+                        eocQuizzes: { reading: [], writing: [], math: [] },
+                        khanAcademy: { reading: [], writing: [], math: [] },
+                        skills: { reading: [], writing: [], math: [] },
+                        chapters: STATIC_CHAPTER_LISTS
+                    };
                      document.getElementById('overview-kpis').innerHTML = `<p class="text-gray-600 text-center col-span-5">No data found for student ${window.currentStudentData.name}.</p>`;
                      window.populateDashboardUI(); // Render empty dashboard
                      return; // Exit here if no data
@@ -416,32 +486,26 @@
                 const skillsPerformance = { reading: {}, writing: {}, math: {} };
 
                 studentQuestionDetails.forEach(qRow => {
-                    // PROBLEM IDENTIFIED:
-                    // qRow['Question ID'] might be null/empty
-                    // qRow['Subject'] might be null/empty (use SAT_Skill_Tag to derive)
-                    // qRow['ClassAveragePoints_Question'] should be ClassAverageTime_Question_Seconds for pacing
-                    // qRow['Correct Answer'] might be null (IsCorrect is boolean)
-
                     // Robustly derive essential data, using fallbacks if needed
-                    const questionId = qRow['Question ID'] || `${qRow['AssessmentName']}-${qRow['QuestionSequenceInQuiz']}`; // Construct ID
-                    const rawSubjectTag = qRow['Subject'] || qRow['SAT Skill Tag']; // Use either 'Subject' or 'SAT Skill Tag'
-                    const subject = (rawSubjectTag && (rawSubjectTag.includes("Math") ? "math" : rawSubjectTag.includes("Reading") ? "reading" : rawSubjectTag.includes("Writing") ? "writing" : "unknown")) || 'unknown';
-                    const skill = qRow['SAT Skill Tag'] || 'Unknown Skill';
+                    const questionId = (qRow['Question ID'] && String(qRow['Question ID'])) || `${qRow['AssessmentName']}-${qRow['QuestionSequenceInQuiz']}`;
+                    const rawSkillTag = qRow['SAT Skill Tag']; // Get the SAT Skill Tag
+                    const subject = window.getSubjectFromSkillTag(rawSkillTag); // Use the new robust function
+                    const skill = rawSkillTag || 'Unknown Skill';
                     
                     // Skip row ONLY if core identifying data (questionId, subject, skill) cannot be determined
                     if (!questionId || subject === 'unknown' || skill === 'Unknown Skill') {
                          console.warn("Skipping question row due to unidentifiable essential data:", qRow);
-                         return; // Skip if basic info is unrecoverable
+                         return;
                     }
 
 
                     const difficulty = qRow['Difficulty'] || 'Unknown';
-                    const yourAnswer = qRow['Student Answer'] || 'N/A';
-                    const correctAnswer = qRow['Correct Answer'] || (qRow.IsCorrect === true ? yourAnswer : 'N/A'); // Infer if IsCorrect is true but no CorrectAnswer is given
-                    const isCorrect = (qRow.IsCorrect === true); // Ensure boolean (PapaParse dynamicTyping helps here)
+                    const yourAnswer = String(qRow['Student Answer']) || 'N/A'; // Ensure string
+                    const correctAnswer = String(qRow['Correct Answer']) || (qRow.IsCorrect === true ? yourAnswer : 'N/A');
+                    const isCorrect = (qRow.IsCorrect === true);
                     const explanation = qRow['Explanation'] || 'No explanation available.';
                     const yourTime = parseFloat(qRow['TimeSpentOnQuestion_Seconds']) || 0;
-                    const classAvgTime = parseFloat(qRow['ClassAverageTime_Question_Seconds']) || 0; // Corrected header for class average time
+                    const classAvgTime = parseFloat(qRow['ClassAverageTime_Question_Seconds']) || 0;
 
 
                     const source = qRow['AssessmentName'] || 'Unknown Source';
