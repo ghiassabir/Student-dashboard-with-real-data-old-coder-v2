@@ -132,13 +132,13 @@
         console.log("Inline script starting execution.");
 
         // --- CONSTANTS FOR DATA FILE URLs ---
-        const AGGREGATED_SCORES_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSySYBO9YL3N4aUG3JEYZMQQIv9d1oSm3ba4Ty9Gt4SsGs2zmTS_k81rH3Qv41mZvClnayNcDpl_QbI/pub?gid=1890969747&single=true&output=csv'; // DashboardFeed_AggregatedScores from Phase 1
+        const AGGREGATED_SCORES_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSySYBO9YL3N4aUG3JEYZMQQIv9d1oSm3ba4Ty9Gt4SsGs2zmTS_k81rH3Qv41mZvClnayNcDpl_QbI/pub?gid=1890969747&single=true&output=csv'; // DashboardFeed_AggregatedScores from Phase 1 
         const QUESTION_DETAILS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=822014112&single=true&output=csv'; // DashboardFeed_QuestionDetails from Phase 2
         const STUDENT_MAPPING_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=0&single=true&output=csv'; // Student_Mapping from Phase 2
 
         // --- GLOBAL DATA STORAGE ---
-        // These MUST be declared at the top-level of this inline script (global scope)
-        // and NOT inside any function, to be accessible by other functions directly or via `window.`
+        // Declare these using 'let' or 'const' ONCE at the very top level of the inline script
+        // and attach functions to `window` for global access.
         let currentStudentData = {};
         let ALL_DASHBOARD_QUESTIONS = [];
 
@@ -255,7 +255,7 @@
             ]
         };
 
-        // --- Utility Functions (Globally accessible) ---
+        // --- Utility Functions (Globally accessible via window. prefix) ---
         window.formatDate = function(dateString) {
             if (!dateString || dateString === "N/A" || dateString === "Not Attempted") return dateString;
             try {
@@ -308,8 +308,8 @@
         };
 
         // --- MAIN DATA LOADING AND TRANSFORMATION ---
-        window.loadAndProcessData = async function(studentEmailToFilter) {
-            console.log("Starting data loading and processing for:", studentEmailToFilter);
+        window.loadAndProcessData = async function(studentIdentifier) { // Changed to studentIdentifier for flexibility
+            console.log("Starting data loading and processing for:", studentIdentifier);
 
             try {
                 const [aggregatedScoresRaw, questionDetailsRaw, studentMappingRaw] = await Promise.all([
@@ -321,22 +321,85 @@
                 console.log("Raw question details:", questionDetailsRaw.length, "rows.");
                 console.log("Raw student mapping:", studentMappingRaw.length, "rows.");
 
-                const studentInfo = studentMappingRaw.find(s => s['Student Email'] === studentEmailToFilter);
-                if (!studentInfo) {
-                    console.error(`Student with email ${studentEmailToFilter} not found in student mapping.`);
-                    document.getElementById('overview-kpis').innerHTML = '<p class="text-red-600 text-center col-span-5">Error: Student data not found. Please check the provided email.</p>';
+                let studentInfo = null;
+                let studentIDForFilter = null;
+
+                // Attempt to find student by EMAIL first
+                if (studentIdentifier && studentIdentifier.includes('@')) {
+                    studentInfo = studentMappingRaw.find(s => s['Student Email'] === studentIdentifier);
+                    if (studentInfo) {
+                        studentIDForFilter = studentInfo['Student ID'];
+                        console.log(`Student found by email '${studentIdentifier}', using Student ID: ${studentIDForFilter}`);
+                    }
+                }
+
+                // If not found by email or if studentIdentifier was already an ID
+                if (!studentInfo && studentIdentifier) {
+                    // Fallback to directly using identifier as Student ID if not found by email
+                    studentInfo = studentMappingRaw.find(s => s['Student ID'] === studentIdentifier);
+                    if (studentInfo) {
+                         studentIDForFilter = studentInfo['Student ID'];
+                         console.log(`Student found by ID '${studentIdentifier}'.`);
+                    } else {
+                         // As a last resort, if identifier is neither a known email nor ID, use it directly (might not yield data)
+                         studentIDForFilter = studentIdentifier;
+                         console.warn(`Student identifier '${studentIdentifier}' not found in mapping. Attempting to filter data directly by this ID.`);
+                    }
+                } else if (!studentIdentifier) {
+                    // No identifier provided, try to find a default with data or fail
+                    console.error("No student identifier provided. Cannot load data.");
+                    document.getElementById('overview-kpis').innerHTML = '<p class="text-red-600 text-center col-span-5">Error: No student identifier provided.</p>';
                     return;
                 }
-                const studentIDFromMapping = studentInfo['Student ID'];
 
-                const studentAggregatedScores = aggregatedScoresRaw.filter(row => row['Student ID'] === studentIDFromMapping);
-                const studentQuestionDetails = questionDetailsRaw.filter(row => row['Student ID'] === studentIDFromMapping);
-                console.log(`Filtered data for student ${studentIDFromMapping} (Email: ${studentEmailToFilter}):`);
+                if (!studentInfo && studentIDForFilter) {
+                    // If studentInfo is still null but we have an IDForFilter (e.g., if studentIdentifier was just "A000")
+                    // We need to create a dummy studentInfo for display if not found in mapping, but ID is valid in data
+                    // For now, let's try to get name from aggregated scores if mapping is sparse
+                    const nameFromAggregated = aggregatedScoresRaw.find(r => r['Student ID'] === studentIDForFilter);
+                    studentInfo = {
+                        'Student Name': nameFromAggregated ? nameFromAggregated['StudentFullName'] : `Student ${studentIDForFilter}`,
+                        'Target SAT Score': 1400, // Default if not in mapping
+                        'Student ID': studentIDForFilter // Ensure ID is set
+                    };
+                    console.warn(`Student ID ${studentIDForFilter} found in data, but not in explicit mapping. Displaying generic info.`);
+                }
+
+                if (!studentIDForFilter) {
+                    console.error("No valid Student ID could be determined for filtering.");
+                    document.getElementById('overview-kpis').innerHTML = '<p class="text-red-600 text-center col-span-5">Error: Could not determine student ID for filtering.</p>';
+                    return;
+                }
+
+                const studentAggregatedScores = aggregatedScoresRaw.filter(row => row['Student ID'] === studentIDForFilter);
+                const studentQuestionDetails = questionDetailsRaw.filter(row => row['Student ID'] === studentIDForFilter);
+                console.log(`Filtered data for final Student ID ${studentIDForFilter}:`);
                 console.log("Aggregated scores rows:", studentAggregatedScores.length);
                 console.log("Question details rows:", studentQuestionDetails.length);
 
+                if (studentAggregatedScores.length === 0 && studentQuestionDetails.length === 0) {
+                     console.warn(`No data found for student ID ${studentIDForFilter} in aggregated scores or question details.`);
+                     document.getElementById('overview-kpis').innerHTML = `<p class="text-gray-600 text-center col-span-5">No data found for student ${studentInfo['Student Name']}.</p>`;
+                     window.currentStudentData = { // Initialize with empty but valid structure
+                        name: studentInfo['Student Name'] || `Student ${studentIDForFilter}`,
+                        targetScore: parseInt(studentInfo['Target SAT Score']) || 1400,
+                        latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 0 },
+                        timeSpent: { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"},
+                        scoreTrend: { labels: [], studentScores: [], classAvgScores: [] },
+                        overallSkillPerformance: { labels: ['Reading', 'Writing', 'Math'], studentAccuracy: [0, 0, 0], classAvgAccuracy: [0, 0, 0] },
+                        cbPracticeTests: [],
+                        eocQuizzes: { reading: [], writing: [], math: [] },
+                        khanAcademy: { reading: [], writing: [], math: [] },
+                        skills: { reading: [], writing: [], math: [] },
+                        chapters: STATIC_CHAPTER_LISTS
+                    };
+                    window.populateDashboardUI(); // Render empty dashboard
+                    return; // Exit here
+                }
+
+
                 window.currentStudentData = { // Use window.currentStudentData
-                    name: studentInfo['Student Name'] || `Student ${studentIDFromMapping}`,
+                    name: studentInfo['Student Name'] || `Student ${studentIDForFilter}`,
                     targetScore: parseInt(studentInfo['Target SAT Score']) || 1400,
                     latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 0 },
                     timeSpent: { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"},
@@ -346,7 +409,7 @@
                     eocQuizzes: { reading: [], writing: [], math: [] },
                     khanAcademy: { reading: [], writing: [], math: [] },
                     skills: { reading: [], writing: [], math: [] },
-                    chapters: STATIC_CHAPTER_LISTS
+                    chapters: STATIC_CHAPTER_LISTS // Use global STATIC_CHAPTER_LISTS
                 };
 
                 const latestTest = studentAggregatedScores
@@ -521,13 +584,13 @@
                     if (subjectSkills.length > 0) {
                         const totalStudentAccuracy = subjectSkills.reduce((sum, s) => sum + s.score, 0);
                         const totalClassAccuracy = subjectSkills.reduce((sum, s) => sum + s.classAvg, 0);
-                        window.currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
-                        window.currentStudentData.overallSkillPerformance.studentAccuracy[index] = Math.round(totalStudentAccuracy / subjectSkills.length);
-                        window.currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = Math.round(totalClassAccuracy / subjectSkills.length);
+                        currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
+                        currentStudentData.overallSkillPerformance.studentAccuracy[index] = Math.round(totalStudentAccuracy / subjectSkills.length);
+                        currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = Math.round(totalClassAccuracy / subjectSkills.length);
                     } else {
-                         window.currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
-                         window.currentStudentData.overallSkillPerformance.studentAccuracy[index] = 0;
-                         window.currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = 0;
+                         currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
+                         currentStudentData.overallSkillPerformance.studentAccuracy[index] = 0;
+                         currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = 0;
                     }
                 });
 
@@ -654,13 +717,11 @@
             document.getElementById('refreshDataBtn').disabled = true;
 
             try {
-                let studentEmail = prompt("Please re-enter your student email ID to refresh data (e.g., student@example.com):");
-                if (!studentEmail) {
-                    alert("Refresh cancelled. No email provided.");
-                    return;
-                }
-                localStorage.setItem('dashboardStudentEmail', studentEmail);
-                await window.loadAndProcessData(studentEmail);
+                // For now, hardcode filter to an ID that exists in data
+                // In a production environment, this would be passed securely (e.g., from LTI)
+                // or retrieved via a login.
+                const studentIdToUse = "A000"; // Using A000 as it has data in AggregatedScores 
+                await window.loadAndProcessData(studentIdToUse); // Pass the ID directly
                 alert("Dashboard data refreshed successfully!");
             } catch (error) {
                 alert("Failed to refresh dashboard data. Check console for errors.");
@@ -840,7 +901,7 @@
                 return `
                 <tr class="${isAttempted ? 'clickable-row' : 'opacity-60'}" ${isAttempted ? `onclick="window.openTestQuestionsModal('${test.name}')"` : ''}>
                     <td>${test.name}</td>
-                    <td>${formatDate(test.date)}</td>
+                    <td>${window.formatDate(test.date)}</td>
                     <td>${test.rw}</td>
                     <td>${test.math}</td>
                     <td>${test.total}</td>
@@ -868,7 +929,7 @@
             tableBody.innerHTML = quizzes.map(quiz => `
                 <tr class="clickable-row" onclick="window.openEOCQuizQuestionsModal('${quiz.name}', '${subject}')">
                     <td>${quiz.name}</td>
-                    <td>${formatDate(quiz.date)}</td>
+                    <td>${window.formatDate(quiz.date)}</td>
                     <td>${quiz.latestScore}</td>
                 </tr>
             `).join('');
@@ -1195,7 +1256,11 @@
         window.onload = function() {
             console.log("window.onload fired. Initiating dashboard setup.");
             window.setupEventListeners(); // Set up event listeners first
-            window.loadAndDisplayDataWrapper(); // Call the wrapper to handle email prompt and data loading
+            // Directly call loadAndProcessData with a known working Student ID for initial load
+            // This bypasses the email prompt which was causing issues with no data in mapping for 'student@example.com'
+            // For a production environment, you would integrate a robust login/ID retrieval method.
+            const studentIdToUse = "A000"; // Using A000 as it has data in AggregatedScores 
+            window.loadAndProcessData(studentIdToUse);
         };
     </script>
 </body>
