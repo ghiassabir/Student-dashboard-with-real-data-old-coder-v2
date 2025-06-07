@@ -135,9 +135,9 @@
         const STUDENT_MAPPING_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=0&single=true&output=csv'; // Student_Mapping from Phase 2
 
         // --- GLOBAL DATA STORAGE ---
+        // Declare these using 'let' or 'const' ONCE at the very top level of the inline script
         let currentStudentData = {};
         let ALL_DASHBOARD_QUESTIONS = [];
-
 
         // --- MAPPING SAT SKILLS TO BOOK CHAPTERS (extracted from your PDF) ---
         const SAT_CHAPTER_SKILL_MAPPING = {
@@ -298,16 +298,17 @@
                 });
             } catch (error) {
                 console.error(`Could not fetch or parse CSV from ${url}:`, error);
-                // Return empty array on error to allow the rest of the app to function with no data
                 return [];
             }
         }
 
-        // --- GLOBAL DATA STORAGE ---
-        let currentStudentData = {};
-        let ALL_DASHBOARD_QUESTIONS = [];
+        // Global functions need to be attached to window directly for onclicks and other direct calls
+        // This makes sure they are visible across the entire script and to the HTML.
+        window.currentStudentData = {};
+        window.ALL_DASHBOARD_QUESTIONS = [];
+        window.SAT_CHAPTER_SKILL_MAPPING = SAT_CHAPTER_SKILL_MAPPING; // Re-assign global for clarity
+        window.STATIC_CHAPTER_LISTS = STATIC_CHAPTER_LISTS; // Re-assign global for clarity
 
-        // Attach main functions to window object
         window.loadAndProcessData = async function(studentEmailToFilter) {
             console.log("Starting data loading and processing for:", studentEmailToFilter);
 
@@ -335,7 +336,7 @@
                 console.log("Aggregated scores rows:", studentAggregatedScores.length);
                 console.log("Question details rows:", studentQuestionDetails.length);
 
-                currentStudentData = {
+                window.currentStudentData = { // Use window.currentStudentData
                     name: studentInfo['Student Name'] || `Student ${studentIDFromMapping}`,
                     targetScore: parseInt(studentInfo['Target SAT Score']) || 1400,
                     latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 0 },
@@ -346,7 +347,7 @@
                     eocQuizzes: { reading: [], writing: [], math: [] },
                     khanAcademy: { reading: [], writing: [], math: [] },
                     skills: { reading: [], writing: [], math: [] },
-                    chapters: STATIC_CHAPTER_LISTS
+                    chapters: STATIC_CHAPTER_LISTS // Use global STATIC_CHAPTER_LISTS
                 };
 
                 const latestTest = studentAggregatedScores
@@ -354,14 +355,14 @@
                     .sort((a, b) => new Date(b['Date Attempted']) - new Date(a['Date Attempted']))[0];
 
                 if (latestTest) {
-                    currentStudentData.latestScores.total = parseInt(latestTest['Total Score']) || 0;
-                    currentStudentData.latestScores.rw = parseInt(latestTest['R&W Score']) || 0;
-                    currentStudentData.latestScores.math = parseInt(latestTest['Math Score']) || 0;
+                    window.currentStudentData.latestScores.total = parseInt(latestTest['Total Score']) || 0;
+                    window.currentStudentData.latestScores.rw = parseInt(latestTest['R&W Score']) || 0;
+                    window.currentStudentData.latestScores.math = parseInt(latestTest['Math Score']) || 0;
                     const avgEocKhanRow = studentAggregatedScores.find(row => row['Assessment Type'] === 'Overall Average');
                     if (avgEocKhanRow && avgEocKhanRow['Avg EOC/Khan Score']) {
-                         currentStudentData.latestScores.avgEocKhan = parseFloat(avgEocKhanRow['Avg EOC/Khan Score']) || 0;
+                         window.currentStudentData.latestScores.avgEocKhan = parseFloat(avgEocKhanRow['Avg EOC/Khan Score']) || 0;
                     } else {
-                        currentStudentData.latestScores.avgEocKhan = 0;
+                        window.currentStudentData.latestScores.avgEocKhan = 0;
                     }
                 }
 
@@ -369,16 +370,16 @@
                     .filter(row => row['Assessment Type'] === 'CB Practice Test' && row['Total Score'] && row['Date Attempted'])
                     .sort((a, b) => new Date(a['Date Attempted']) - new Date(b['Date Attempted']));
 
-                currentStudentData.scoreTrend.labels = scoreTrendData.map(row => row['Test Name']);
-                currentStudentData.scoreTrend.studentScores = scoreTrendData.map(row => parseInt(row['Total Score']) || 0);
-                currentStudentData.scoreTrend.classAvgScores = scoreTrendData.map(row => parseInt(row['Class Avg Total']) || 0);
+                window.currentStudentData.scoreTrend.labels = scoreTrendData.map(row => row['Test Name']);
+                window.currentStudentData.scoreTrend.studentScores = scoreTrendData.map(row => parseInt(row['Total Score']) || 0);
+                window.currentStudentData.scoreTrend.classAvgScores = scoreTrendData.map(row => parseInt(row['Class Avg Total']) || 0);
 
                 const timeSpentRow = studentAggregatedScores.find(row => row['Assessment Type'] === 'Time Spent');
                 if (timeSpentRow) {
-                    currentStudentData.timeSpent.studentAvg = parseFloat(timeSpentRow['Your Avg Time (min/day)']) || 0;
-                    currentStudentData.timeSpent.classAvg = parseFloat(timeSpentRow['Class Avg Time (min/day)']) || 0;
+                    window.currentStudentData.timeSpent.studentAvg = parseFloat(timeSpentRow['Your Avg Time (min/day)']) || 0;
+                    window.currentStudentData.timeSpent.classAvg = parseFloat(timeSpentRow['Class Avg Time (min/day)']) || 0;
                 } else {
-                    currentStudentData.timeSpent = { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"};
+                    window.currentStudentData.timeSpent = { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"};
                 }
 
                 const cbTestsMap = new Map();
@@ -427,7 +428,7 @@
                         source: source,
                         text: questionText
                     };
-                    ALL_DASHBOARD_QUESTIONS.push(questionObj);
+                    window.ALL_DASHBOARD_QUESTIONS.push(questionObj); // Use window.ALL_DASHBOARD_QUESTIONS
 
                     if (qRow['Assessment Type'] === 'CB Practice Test' && source) {
                         if (!cbTestsMap.has(source)) {
@@ -472,16 +473,16 @@
                     }
                 });
 
-                currentStudentData.cbPracticeTests = Array.from(cbTestsMap.values());
+                window.currentStudentData.cbPracticeTests = Array.from(cbTestsMap.values());
                 const allCBTestNames = [
                     "Diagnostic Test", "Official Practice Test 1", "Official Practice Test 4",
                     "Official Practice Test 5", "Official Practice Test 6", "Official Practice Test 7",
                     "Official Practice Test 8", "Official Practice Test 9", "Official Practice Test 10"
                 ];
                 allCBTestNames.forEach(testName => {
-                    if (!currentStudentData.cbPracticeTests.some(test => test.name === testName)) {
+                    if (!window.currentStudentData.cbPracticeTests.some(test => test.name === testName)) {
                         const testAggregate = studentAggregatedScores.find(r => r['Test Name'] === testName && r['Assessment Type'] === 'CB Practice Test');
-                        currentStudentData.cbPracticeTests.push({
+                        window.currentStudentData.cbPracticeTests.push({
                             name: testName,
                             date: testAggregate ? (testAggregate['Date Attempted'] || "Not Attempted") : "Not Attempted",
                             rw: testAggregate ? (testAggregate['R&W Score'] || "-") : "-",
@@ -491,7 +492,7 @@
                         });
                     }
                 });
-                currentStudentData.cbPracticeTests.sort((a, b) => {
+                window.currentStudentData.cbPracticeTests.sort((a, b) => {
                     const dateA = new Date(a.date !== "Not Attempted" ? a.date : "1970-01-01");
                     const dateB = new Date(b.date !== "Not Attempted" ? b.date : "1970-01-01");
                     return dateA - dateB;
@@ -499,15 +500,15 @@
 
 
                 ['reading', 'writing', 'math'].forEach(sub => {
-                    currentStudentData.eocQuizzes[sub] = Array.from(eocQuizzesMap[sub].values());
-                    currentStudentData.eocQuizzes[sub].sort((a, b) => new Date(a.date) - new Date(b.date));
+                    window.currentStudentData.eocQuizzes[sub] = Array.from(eocQuizzesMap[sub].values());
+                    window.currentStudentData.eocQuizzes[sub].sort((a, b) => new Date(a.date) - new Date(b.date));
 
                     for (const skillName in skillsPerformance[sub]) {
                         const skillData = skillsPerformance[sub][skillName];
                         const studentScore = skillData.totalCount > 0 ? Math.round((skillData.correctCount / skillData.totalCount) * 100) : 0;
                         const classAvg = skillData.classTotalCount > 0 ? Math.round((skillData.classCorrectSum / skillData.classTotalCount)) : 0;
 
-                        currentStudentData.skills[sub].push({
+                        window.currentStudentData.skills[sub].push({
                             name: skillName,
                             score: studentScore,
                             classAvg: classAvg,
@@ -517,62 +518,62 @@
                 });
 
                 ['reading', 'writing', 'math'].forEach((sub, index) => {
-                    const subjectSkills = currentStudentData.skills[sub];
+                    const subjectSkills = window.currentStudentData.skills[sub];
                     if (subjectSkills.length > 0) {
                         const totalStudentAccuracy = subjectSkills.reduce((sum, s) => sum + s.score, 0);
                         const totalClassAccuracy = subjectSkills.reduce((sum, s) => sum + s.classAvg, 0);
-                        currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
-                        currentStudentData.overallSkillPerformance.studentAccuracy[index] = Math.round(totalStudentAccuracy / subjectSkills.length);
-                        currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = Math.round(totalClassAccuracy / subjectSkills.length);
+                        window.currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
+                        window.currentStudentData.overallSkillPerformance.studentAccuracy[index] = Math.round(totalStudentAccuracy / subjectSkills.length);
+                        window.currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = Math.round(totalClassAccuracy / subjectSkills.length);
                     } else {
-                         currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
-                         currentStudentData.overallSkillPerformance.studentAccuracy[index] = 0;
-                         currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = 0;
+                         window.currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
+                         window.currentStudentData.overallSkillPerformance.studentAccuracy[index] = 0;
+                         window.currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = 0;
                     }
                 });
 
 
-                const allEocKhanScores = Object.values(currentStudentData.eocQuizzes).flat().map(q => {
+                const allEocKhanScores = Object.values(window.currentStudentData.eocQuizzes).flat().map(q => {
                     const percentageMatch = String(q.latestScore).match(/(\d+)%/);
                     return percentageMatch ? parseInt(percentageMatch[1]) : 0;
                 }).filter(score => score > 0);
 
-                const allKhanScores = Object.values(currentStudentData.khanAcademy).flat().map(q => {
+                const allKhanScores = Object.values(window.currentStudentData.khanAcademy).flat().map(q => {
                     const percentageMatch = String(q.latestScore).match(/(\d+)%/);
                     return percentageMatch ? parseInt(percentageMatch[1]) : 0;
                 }).filter(score => score > 0);
 
                 const combinedEocKhanScores = [...allEocKhanScores, ...allKhanScores];
                 if (combinedEocKhanScores.length > 0) {
-                    currentStudentData.latestScores.avgEocKhan = Math.round(combinedEocKhanScores.reduce((sum, score) => sum + score, 0) / combinedEocKhanScores.length);
+                    window.currentStudentData.latestScores.avgEocKhan = Math.round(combinedEocKhanScores.reduce((sum, score) => sum + score, 0) / combinedEocKhanScores.length);
                 }
 
 
-                console.log("Final processed currentStudentData:", currentStudentData);
+                console.log("Final processed currentStudentData:", window.currentStudentData);
 
-                populateDashboardUI();
+                window.populateDashboardUI();
 
             } catch (error) {
                 console.error("Failed to load or process data:", error);
                 document.getElementById('overview-kpis').innerHTML = '<p class="text-red-600 text-center col-span-5">Error loading dashboard data. Please try again later or check console for details.</p>';
                 document.getElementById('cb-practice-tests-table-body').innerHTML = '<tr><td colspan="5" class="text-red-600 text-center">Failed to load test data.</td></tr>';
             }
-        }
+        };
 
 
-        function populateDashboardUI() {
-            document.getElementById('studentNameDisplay').textContent = `Welcome! ${currentStudentData.name}`;
+        window.populateDashboardUI = function() { // Attach to window
+            document.getElementById('studentNameDisplay').textContent = `Welcome! ${window.currentStudentData.name}`;
 
-            populateOverview(currentStudentData);
-            populatePracticeTestsTable(currentStudentData.cbPracticeTests);
+            window.populateOverview(window.currentStudentData);
+            window.populatePracticeTestsTable(window.currentStudentData.cbPracticeTests);
 
             ['reading', 'writing', 'math'].forEach(subject => {
-                populateEOCPractice(subject, currentStudentData.eocQuizzes[subject] || []);
-                populateKhanAcademy(subject, currentStudentData.khanAcademy[subject] || []);
+                window.populateEOCPractice(subject, window.currentStudentData.eocQuizzes[subject] || []);
+                window.populateKhanAcademy(subject, window.currentStudentData.khanAcademy[subject] || []);
             });
 
             document.querySelector('.main-tab-button[data-main-tab="overview"]')?.click();
-        }
+        };
 
 
         // Chart.js Global Configuration
@@ -593,7 +594,7 @@
             document.getElementById('currentYear').textContent = new Date().getFullYear();
 
             hamburgerButton?.addEventListener('click', () => mobileMenu?.classList.toggle('hidden'));
-            refreshDataBtn?.addEventListener('click', window.handleRefreshData); // Call via window
+            refreshDataBtn?.addEventListener('click', window.handleRefreshData);
 
             const switchMainTab = (tabElement) => {
                 const targetTabName = tabElement.getAttribute('data-main-tab');
@@ -607,11 +608,11 @@
                 document.getElementById(targetTabName + '-content')?.classList.remove('hidden');
 
                 if (targetTabName === 'overview') {
-                    window.initializeOverviewCharts(currentStudentData); // Call via window
+                    window.initializeOverviewCharts(window.currentStudentData);
                 } else if (['reading', 'writing', 'math'].includes(targetTabName)) {
                     const firstSubTabButton = document.querySelector(`#${targetTabName}-content .sub-tab-button[data-sub-tab="${targetTabName}-skills-hub"]`);
                     if (firstSubTabButton) {
-                        window.switchSubTab(firstSubTabButton); // Call via window
+                        window.switchSubTab(firstSubTabButton);
                     }
                 }
                 mobileMenu?.classList.add('hidden');
@@ -625,7 +626,7 @@
                 });
             });
 
-            window.switchSubTab = (subTabElement) => { // Attach to window
+            window.switchSubTab = (subTabElement) => { // Attached to window
                 const parentMainContent = subTabElement.closest('.main-tab-content');
                 const targetSubTabName = subTabElement.getAttribute('data-sub-tab');
 
@@ -637,16 +638,17 @@
 
                 if (targetSubTabName.endsWith('-skills-hub')) {
                     const subject = targetSubTabName.replace('-skills-hub', '');
-                    window.populateSkillsHub(subject, currentStudentData.skills[subject] || []); // Call via window
+                    window.populateSkillsHub(subject, window.currentStudentData.skills[subject] || []);
                 }
             };
 
             document.querySelectorAll('.sub-tab-button').forEach(subTab => {
-                subTab.addEventListener('click', () => window.switchSubTab(subTab)); // Call via window
+                subTab.addEventListener('click', () => window.switchSubTab(subTab));
             });
         }
 
-        window.handleRefreshData = async function() { // Attach to window
+
+        window.handleRefreshData = async function() { // Attached to window
             console.log("Refresh Data button clicked! Reloading data from CSVs.");
             const originalRefreshText = document.getElementById('refreshDataBtn').textContent;
             document.getElementById('refreshDataBtn').textContent = 'Refreshing...';
@@ -659,7 +661,7 @@
                     return;
                 }
                 localStorage.setItem('dashboardStudentEmail', studentEmail);
-                await window.loadAndProcessData(studentEmail); // Call via window
+                await window.loadAndProcessData(studentEmail);
                 alert("Dashboard data refreshed successfully!");
             } catch (error) {
                 alert("Failed to refresh dashboard data. Check console for errors.");
@@ -669,7 +671,7 @@
             }
         }
 
-        window.populateOverview = function(data) { // Attach to window
+        window.populateOverview = function(data) { // Attached to window
             const kpiContainer = document.getElementById('overview-kpis');
             if (!kpiContainer) { console.error("Overview KPIs container not found."); return; }
 
@@ -691,7 +693,7 @@
             document.getElementById('timeSpentOverview').innerHTML = `<p class="text-gray-600">Your Avg: <span class="font-semibold">${data.timeSpent.studentAvg} ${data.timeSpent.studentUnit}</span></p><p class="text-gray-600">Class Avg: <span class="font-semibold">${data.timeSpent.classAvg} ${data.timeSpent.classUnit}</span></p>`;
         }
 
-        window.initializeOverviewCharts = function(data) { // Attach to window
+        window.initializeOverviewCharts = function(data) { // Attached to window
             const scoreTrendChartCanvas = document.getElementById('scoreTrendChart');
             if (!scoreTrendChartCanvas) {
                 console.warn("Score Trend Chart canvas not found. Cannot initialize chart.");
@@ -799,7 +801,7 @@
             }
         }
 
-        window.populateSkillsHub = function(subject, skills) { // Attach to window
+        window.populateSkillsHub = function(subject, skills) { // Attached to window
             const container = document.getElementById(`${subject}-skills-hub-body`);
             if (!container) return;
 
@@ -825,7 +827,7 @@
         }
 
 
-        window.populatePracticeTestsTable = function(tests) { // Attach to window
+        window.populatePracticeTestsTable = function(tests) { // Attached to window
             const tableBody = document.getElementById('cb-practice-tests-table-body');
             if (!tableBody) return;
 
@@ -847,7 +849,7 @@
             }).join('');
         }
 
-        window.populateEOCPractice = function(subject, quizzes) { // Attach to window
+        window.populateEOCPractice = function(subject, quizzes) { // Attached to window
             const tableBody = document.getElementById(`${subject}-eoc-tbody`);
             if (!tableBody) return;
 
@@ -873,7 +875,7 @@
             `).join('');
         }
 
-        window.populateKhanAcademy = function(subject, khanData) { // Attach to window
+        window.populateKhanAcademy = function(subject, khanData) { // Attached to window
             const container = document.getElementById(`${subject}-khan-data`);
             if (!container) return;
 
@@ -881,17 +883,17 @@
                 container.innerHTML = `<p class="text-gray-500 text-center p-4">No Khan Academy data available for ${subject}.</p>`;
                 return;
             }
-            container.innerHTML = `<p class="text-gray-500 text-center p-4">Khan Academy data for ${subject} will be displayed here once fetched and transformed.</p>`;
+            container.innerHTML = `<p class="text-center p-4 text-gray-500">Khan Academy data for ${subject} will be displayed here once fetched and transformed.</p>`;
         }
 
         const modal = document.getElementById('detailModal');
         const modalTitle = document.getElementById('modalTitle');
         const modalBody = document.getElementById('modalBody');
 
-        window.openSkillIncorrectQuestionsModal = function(skillName, subject) { // Attach to window
+        window.openSkillIncorrectQuestionsModal = function(skillName, subject) { // Attached to window
             modalTitle.textContent = `Incorrect Questions for: ${skillName} (${subject.charAt(0).toUpperCase() + subject.slice(1)})`;
 
-            const incorrectQuestions = ALL_DASHBOARD_QUESTIONS.filter(q =>
+            const incorrectQuestions = window.ALL_DASHBOARD_QUESTIONS.filter(q =>
                 q.skill === skillName && !q.isCorrect && q.subject === subject
             );
 
@@ -908,12 +910,12 @@
             window.addExplanationToggleListeners();
         }
 
-        window.openTestQuestionsModal = function(testName) { // Attach to window
+        window.openTestQuestionsModal = function(testName) { // Attached to window
             modalTitle.textContent = `Reviewing Test: ${testName}`;
-            const test = currentStudentData.cbPracticeTests.find(t => t.name === testName);
+            const test = window.currentStudentData.cbPracticeTests.find(t => t.name === testName);
 
             if (!test || !test.questions || test.questions.length === 0) {
-                modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No question details found for ${testName}.</p>`;
+                modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No questions found for ${testName}.</p>`;
                 modal.style.display = "block";
                 return;
             }
@@ -942,9 +944,9 @@
             }
         }
 
-        window.openEOCQuizQuestionsModal = function(quizName, subject) { // Attach to window
+        window.openEOCQuizQuestionsModal = function(quizName, subject) { // Attached to window
             modalTitle.textContent = `Reviewing EOC Quiz: ${quizName} (${subject.charAt(0).toUpperCase() + subject.slice(1)})`;
-            const quizzesForSubject = currentStudentData.eocQuizzes[subject] || [];
+            const quizzesForSubject = window.currentStudentData.eocQuizzes[subject] || [];
             const quiz = quizzesForSubject.find(q => q.name === quizName);
 
             if (!quiz || !quiz.questions || quiz.questions.length === 0) {
@@ -962,7 +964,7 @@
         }
 
 
-        window.closeModal = function() { // Attach to window
+        window.closeModal = function() { // Attached to window
             const canvases = modalBody.querySelectorAll('canvas');
             canvases.forEach(canvas => {
                 const chart = Chart.getChart(canvas);
@@ -980,7 +982,7 @@
             }
         };
 
-        window.renderQuestionAnalysisCard = function(q, uniqueIdPrefix, includePacing = false) { // Attach to window
+        window.renderQuestionAnalysisCard = function(q, uniqueIdPrefix, includePacing = false) { // Attached to window
             const resultText = q.isCorrect ? "Correct" : "Incorrect";
             const resultClass = q.isCorrect ? "text-good" : "text-poor";
             const sourceInfo = q.source ? `<span class="meta-item text-gray-500">Source: ${q.source}</span>` : '';
@@ -999,7 +1001,7 @@
                 </div>
             ` : '';
 
-            const relevantChapters = window.getChaptersForSkill(q.skill, q.subject); // Call via window
+            const relevantChapters = window.getChaptersForSkill(q.skill, q.subject);
             const chapterReviewHtml = relevantChapters.length > 0 ? `
                 <div class="mt-4 p-3 bg-blue-50 rounded-md border border-blue-200 text-sm">
                     <p class="font-semibold text-blue-800 mb-1">Review Chapters:</p>
@@ -1035,9 +1037,9 @@
             </div>`;
         }
 
-        window.getChaptersForSkill = function(skillName, subject) { // Attach to window
+        window.getChaptersForSkill = function(skillName, subject) { // Attached to window
             const chapters = new Set();
-            const skillMap = SAT_CHAPTER_SKILL_MAPPING[subject];
+            const skillMap = window.SAT_CHAPTER_SKILL_MAPPING[subject];
 
             if (skillMap) {
                 for (const mappedSkill in skillMap) {
@@ -1052,7 +1054,7 @@
         }
 
 
-        window.renderDynamicCharts = function() { // Attach to window
+        window.renderDynamicCharts = function() { // Attached to window
             const canvases = modalBody.querySelectorAll('canvas[id^="chart-"]');
             canvases.forEach(canvas => {
                 const chartId = canvas.id;
@@ -1064,7 +1066,7 @@
                 const parts = chartId.split('-');
                 const qId = parts.slice(2).join('-');
 
-                const qData = ALL_DASHBOARD_QUESTIONS.find(q => q.id === qId);
+                const qData = window.ALL_DASHBOARD_QUESTIONS.find(q => q.id === qId);
 
                 if (qData && qData.classPerformance) {
                     const correct = qData.classPerformance.correct || 0;
@@ -1109,7 +1111,7 @@
             });
         }
 
-        window.renderPacingBarChart = function(canvasId, questions) { // Attach to window
+        window.renderPacingBarChart = function(canvasId, questions) { // Attached to window
             const canvas = document.getElementById(canvasId);
             if (!canvas) return;
 
@@ -1127,7 +1129,7 @@
                 const avgTimeForCalc = q.classAvgTime > 0 ? q.classAvgTime : 1;
                 if (diff > (avgTimeForCalc * 0.2)) return '#dc3545';
                 if (diff < -(avgTimeForCalc * 0.2)) return '#28a745';
-                return '#4b5563';
+                return '#4b5266'; // Changed to a slightly darker gray/blue to match theme
             });
 
             const borderColors = questions.map(q => {
@@ -1177,7 +1179,7 @@
             });
         }
 
-        window.addExplanationToggleListeners = function() { // Attach to window
+        window.addExplanationToggleListeners = function() { // Attached to window
             modalBody.querySelectorAll('.toggle-explanation-btn').forEach(button => {
                 button.onclick = function() {
                     const targetId = this.getAttribute('data-target');
