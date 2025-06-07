@@ -308,7 +308,7 @@
         };
 
         // --- MAIN DATA LOADING AND TRANSFORMATION ---
-        window.loadAndProcessData = async function(studentIdentifier) {
+        window.loadAndProcessData = async function(studentIdentifier) { // Changed to studentIdentifier for flexibility
             console.log("Starting data loading and processing for:", studentIdentifier);
 
             try {
@@ -325,7 +325,7 @@
                 let studentGmailIDForFilter = null;
 
                 // Attempt to find student in studentMapping by email or Canvas ID
-                studentInfo = studentMappingRaw.find(s => s['Student Email_Canvas'] === studentIdentifier || s['StudentID_Canvas'] === studentIdentifier); 
+                studentInfo = studentMappingRaw.find(s => s['Student Email_Canvas'] === studentIdentifier || s['StudentGmailID'] === studentIdentifier || s['StudentID_Canvas'] === studentIdentifier); 
 
                 if (studentInfo) {
                     studentGmailIDForFilter = studentInfo['StudentGmailID'];
@@ -362,7 +362,7 @@
                     eocQuizzes: { reading: [], writing: [], math: [] },
                     khanAcademy: { reading: [], writing: [], math: [] },
                     skills: { reading: [], writing: [], math: [] },
-                    chapters: STATIC_CHAPTER_LISTS
+                    chapters: STATIC_CHAPTER_LISTS // Use global STATIC_CHAPTER_LISTS
                 };
 
                 const latestTest = studentAggregatedScores
@@ -374,7 +374,7 @@
                     window.currentStudentData.latestScores.rw = parseInt(latestTest['ScaledScore_RW']) || 0;
                     window.currentStudentData.latestScores.math = parseInt(latestTest['ScaledScore_Math']) || 0;
                     const avgEocKhanRow = studentAggregatedScores.find(row => row['Assessment Type'] === 'Overall Average');
-                    if (avgEocKhanRow && avgEocKhanRow['Avg EOC/Khan Score']) {
+                    if (avgEocKhanRow && avgEocKhanRow['Avg EOC/Khan Score']) { // Column name needs to be confirmed
                          window.currentStudentData.latestScores.avgEocKhan = parseFloat(avgEocKhanRow['Avg EOC/Khan Score']) || 0;
                     } else {
                         const allEocScores = Object.values(window.currentStudentData.eocQuizzes).flat().map(q => {
@@ -416,29 +416,38 @@
                 const skillsPerformance = { reading: {}, writing: {}, math: {} };
 
                 studentQuestionDetails.forEach(qRow => {
-                    // Log the full row if essential data is missing
-                    if (!qRow['Question ID'] || !qRow['Subject'] || !qRow['SAT Skill Tag']) {
-                        console.warn("Skipping question row due to missing essential data:", qRow);
-                        console.log("Problematic row details:", qRow); // THIS LINE WILL LOG THE FULL ROW
-                        return;
-                    }
+                    // PROBLEM IDENTIFIED:
+                    // qRow['Question ID'] might be null/empty
+                    // qRow['Subject'] might be null/empty (use SAT_Skill_Tag to derive)
+                    // qRow['SAT Skill Tag'] might be null/empty
+                    // qRow['ClassAveragePoints_Question'] should be ClassAverageTime_Question_Seconds for pacing
+                    // qRow['Correct Answer'] might be null (IsCorrect is boolean)
 
-                    const questionId = qRow['Question ID'];
-                    const subject = (qRow['Subject'] || '').toLowerCase();
-                    const skill = qRow['SAT Skill Tag'];
+                    // Robust check: Ensure necessary fields for core question object exist
+                    // Fallback to "Unknown" if missing, but don't skip the whole row if possible
+                    const questionId = qRow['Question ID'] || `${qRow['AssessmentName']}-Q${qRow['QuestionSequenceInQuiz']}`; // Construct ID if missing
+                    const subject = (qRow['Subject'] || (qRow['SAT Skill Tag'] && (qRow['SAT Skill Tag'].includes("Math") ? "math" : qRow['SAT Skill Tag'].includes("Reading") ? "reading" : qRow['SAT Skill Tag'].includes("Writing") ? "writing" : "unknown")) || 'unknown').toLowerCase();
+                    const skill = qRow['SAT Skill Tag'] || 'Unknown Skill';
                     const difficulty = qRow['Difficulty'] || 'Unknown';
-                    const yourAnswer = qRow['Student Answer'] || '';
-                    const correctAnswer = qRow['Correct Answer'] || (qRow.IsCorrect === true ? yourAnswer : '');
-                    const isCorrect = (qRow.IsCorrect === true);
+                    const yourAnswer = qRow['Student Answer'] || 'N/A';
+                    const correctAnswer = qRow['Correct Answer'] || (qRow.IsCorrect === true ? yourAnswer : 'N/A'); // If CorrectAnswer is empty but IsCorrect is true, assume YourAnswer is correct. Otherwise N/A.
+                    const isCorrect = (qRow.IsCorrect === true); // Ensure boolean
                     const explanation = qRow['Explanation'] || 'No explanation available.';
                     const yourTime = parseFloat(qRow['TimeSpentOnQuestion_Seconds']) || 0;
-                    const classAvgTime = parseFloat(qRow['ClassAverageTime_Question_Seconds']) || 0; // Corrected from ClassAveragePoints_Question
+                    const classAvgTime = parseFloat(qRow['ClassAverageTime_Question_Seconds']) || 0; // Corrected header
+
                     const source = qRow['AssessmentName'] || 'Unknown Source';
                     const questionText = qRow['QuestionText_fromMetadata'] || `Question ${questionId}`;
 
                     const classCorrect = parseFloat(qRow['Class % Correct']) || 0;
                     const classIncorrect = parseFloat(qRow['Class % Incorrect']) || 0;
                     const classUnanswered = parseFloat(qRow['Class % Unanswered']) || (100 - classCorrect - classIncorrect);
+
+                    // Skip the row ONLY if basic identification is impossible
+                    if (!questionId || subject === 'unknown' || skill === 'Unknown Skill') {
+                         console.warn("Skipping question row due to unidentifiable essential data:", qRow);
+                         return;
+                    }
 
                     const questionObj = {
                         id: questionId,
@@ -1236,8 +1245,8 @@
             console.log("window.onload fired. Initiating dashboard setup.");
             window.setupEventListeners(); // Set up event listeners first
             
-            // Initial load for a confirmed StudentGmailID from your data.
-            // This student ('aisha@example.com') has data in the main feeds.
+            // Hardcode filtering by a confirmed StudentGmailID from your data.
+            // This student ('aisha.m@example.com') has data in the main feeds.
             const studentGmailIdForInitialLoad = "aisha.m@example.com"; 
             console.log(`Initial dashboard load for student: ${studentGmailIdForInitialLoad}`);
             window.loadAndProcessData(studentGmailIdForInitialLoad);
