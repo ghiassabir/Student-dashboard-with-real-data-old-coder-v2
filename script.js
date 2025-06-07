@@ -6,7 +6,7 @@ const STUDENT_MAPPING_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-
 
 // --- CONFIGURATION ---
 // IMPORTANT: Change this to the student ID you want to view
-const STUDENT_ID_TO_FILTER = "A001"; // Example student ID from your data, adjust as needed
+const STUDENT_ID_TO_FILTER = "7300000000000001"; // Example student ID from your data, adjust as needed
 
 // --- GLOBAL DATA STORAGE ---
 let currentStudentData = {}; // This will be populated from CSVs
