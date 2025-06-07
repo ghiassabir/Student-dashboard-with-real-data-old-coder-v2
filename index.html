@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Analytics Hub (The SAT Hub Theme)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
-    <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="antialiased">
 
@@ -73,7 +73,7 @@
         </div>
 
         <div id="cb-practice-tests-content" class="main-tab-content hidden"><section class="themed-card"><div class="themed-card-title-strip">CB Non-Adaptive Tests</div><div class="themed-card-body overflow-x-auto"><table class="min-w-full table"><thead><tr><th>Test Name</th><th>Date Attempted</th><th>R&W Score</th><th>Math Score</th><th>Total Score</th></tr></thead><tbody id="cb-practice-tests-table-body"></tbody></table></div></section></div>
-        
+
         <div id="reading-content" class="main-tab-content hidden space-y-6">
             <div class="flex flex-wrap space-x-2 mb-4 border-b pb-2">
                 <button data-sub-tab="reading-skills-hub" class="sub-tab-button active">Skills Hub</button>
@@ -130,14 +130,9 @@
     
     <script>
         // --- CONSTANTS FOR DATA FILE URLs ---
-        const AGGREGATED_SCORES_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSySYBO9YL3N4aUG3JEYZMQQIv9d1oSm3ba4Ty9Gt4SsGs2zmTS_k81rH3Qv41mZvClnayNcDpl_QbI/pub?gid=1890969747&single=true&output=csv'; // Phase 1
-        const QUESTION_DETAILS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=822014112&single=true&output=csv'; // Phase 2
-        const STUDENT_MAPPING_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=0&single=true&output=csv'; // Phase 2
-
-        // --- CONFIGURATION ---
-        // IMPORTANT: The dashboard will now prompt for the student's email.
-        // For initial testing or if you want to hardcode, uncomment and set this:
-        // let STUDENT_EMAIL_TO_FILTER = "student@example.com"; 
+        const AGGREGATED_SCORES_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSySYBO9YL3N4aUG3JEYZMQQIv9d1oSm3ba4Ty9Gt4SsGs2zmTS_k81rH3Qv41mZvClnayNcDpl_QbI/pub?gid=1890969747&single=true&output=csv'; // DashboardFeed_AggregatedScores from Phase 1
+        const QUESTION_DETAILS_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=822014112&single=true&output=csv'; // DashboardFeed_QuestionDetails from Phase 2
+        const STUDENT_MAPPING_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=0&single=true&output=csv'; // Student_Mapping from Phase 2
 
         // --- GLOBAL DATA STORAGE ---
         let currentStudentData = {};
@@ -271,203 +266,171 @@
             }
         }
 
-        function fetchCsv(url) {
-            return new Promise((resolve, reject) => {
-                PapaParse.parse(url, {
-                    download: true,
-                    header: true,
-                    skipEmptyLines: true,
-                    complete: function(results) {
-                        if (results.errors.length) {
-                            console.error('PapaParse errors for', url, ':', results.errors);
-                            reject(results.errors);
-                        } else {
+        /**
+         * Fetches CSV data from a given URL and parses it using PapaParse.
+         * Note: PapaParse is assumed to be globally available as `Papa`
+         * @param {string} url - The URL of the CSV file.
+         * @returns {Promise<Array<Object>>} A promise that resolves with an array of objects representing the CSV data.
+         */
+        async function fetchCsvData(url) {
+            console.log(`Fetching data from: ${url}`);
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const csvText = await response.text();
+                return new Promise((resolve, reject) => {
+                    // Using Papa.parse as per the last provided script.js
+                    Papa.parse(csvText, {
+                        header: true,
+                        dynamicTyping: true,
+                        skipEmptyLines: true,
+                        complete: function(results) {
+                            if (results.errors.length) {
+                                console.error(`PapaParse errors for ${url}:`, results.errors);
+                                reject(results.errors);
+                            }
+                            console.log(`Successfully parsed ${results.data.length} rows from ${url}`);
+                            if (results.meta && results.meta.fields) {
+                                console.log(`Headers for ${url}:`, results.meta.fields);
+                            }
                             resolve(results.data);
+                        },
+                        error: function(err) {
+                            console.error(`Network or parsing error for ${url}:`, err);
+                            reject(err);
                         }
-                    },
-                    error: function(err) {
-                        console.error('Network or parsing error for', url, ':', err);
-                        reject(err);
-                    }
+                    });
                 });
-            });
+            } catch (error) {
+                console.error(`Could not fetch or parse CSV from ${url}:`, error);
+                return [];
+            }
         }
 
-        async function loadAndProcessData(studentEmailToFilter) {
-            console.log("Starting data loading and processing for:", studentEmailToFilter);
+        /**
+         * Transforms raw CSV data into the structured currentStudentData object.
+         * This is the core data processing logic.
+         * @param {Array<Object>} aggregatedScoresData - Data from DashboardFeed_AggregatedScores.
+         * @param {Array<Object>} questionDetailsData - Data from DashboardFeed_QuestionDetails.
+         * @param {Array<Object>} studentMappingData - Data from Student_Mapping.
+         * @param {string} studentEmailToFilter - The email of the student to filter by.
+         * @returns {Object} The transformed currentStudentData object.
+         */
+        function transformRawData(aggregatedScoresData, questionDetailsData, studentMappingData, studentEmailToFilter) {
+            console.log("Starting data transformation...");
 
-            try {
-                const [aggregatedScoresRaw, questionDetailsRaw, studentMappingRaw] = await Promise.all([
-                    fetchCsv(AGGREGATED_SCORES_CSV_URL),
-                    fetchCsv(QUESTION_DETAILS_CSV_URL),
-                    fetchCsv(STUDENT_MAPPING_CSV_URL)
-                ]);
-                console.log("Raw aggregated scores:", aggregatedScoresRaw.length, "rows.");
-                console.log("Raw question details:", questionDetailsRaw.length, "rows.");
-                console.log("Raw student mapping:", studentMappingRaw.length, "rows.");
+            const studentInfo = studentMappingData.find(s => s['Student Email'] === studentEmailToFilter);
+            if (!studentInfo) {
+                console.error(`Student with email ${studentEmailToFilter} not found in student mapping.`);
+                alert(`Error: Student with email ${studentEmailToFilter} not found in data. Please check your email or contact support.`);
+                throw new Error("Student data not found for filtering.");
+            }
+            const studentIDFromMapping = studentInfo['Student ID'];
 
-                const studentInfo = studentMappingRaw.find(s => s['Student Email'] === studentEmailToFilter);
-                if (!studentInfo) {
-                    console.error(`Student with email ${studentEmailToFilter} not found in student mapping.`);
-                    document.getElementById('overview-kpis').innerHTML = '<p class="text-red-600 text-center col-span-5">Error: Student data not found. Please check the provided email.</p>';
+            const studentAggregatedScores = aggregatedScoresData.filter(row => row['Student ID'] === studentIDFromMapping);
+            const studentQuestionDetails = questionDetailsData.filter(row => row['Student ID'] === studentIDFromMapping);
+
+            let transformedData = {
+                name: studentInfo['Student Name'] || `Student ${studentIDFromMapping}`,
+                targetScore: parseInt(studentInfo['Target SAT Score']) || 1400,
+                latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 0 },
+                timeSpent: { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"},
+                scoreTrend: { labels: [], studentScores: [], classAvgScores: [] },
+                overallSkillPerformance: { labels: ['Reading', 'Writing', 'Math'], studentAccuracy: [0, 0, 0], classAvgAccuracy: [0, 0, 0] },
+                cbPracticeTests: [],
+                eocQuizzes: { reading: [], writing: [], math: [] },
+                khanAcademy: { reading: [], writing: [], math: [] },
+                skills: { reading: [], writing: [], math: [] },
+                chapters: STATIC_CHAPTER_LISTS
+            };
+
+            const latestTest = studentAggregatedScores
+                .filter(row => row['Assessment Type'] === 'CB Practice Test' && row['Total Score'] && row['Date Attempted'])
+                .sort((a, b) => new Date(b['Date Attempted']) - new Date(a['Date Attempted']))[0];
+
+            if (latestTest) {
+                transformedData.latestScores.total = parseInt(latestTest['Total Score']) || 0;
+                transformedData.latestScores.rw = parseInt(latestTest['R&W Score']) || 0;
+                transformedData.latestScores.math = parseInt(latestTest['Math Score']) || 0;
+                const avgEocKhanRow = studentAggregatedScores.find(row => row['Assessment Type'] === 'Overall Average');
+                if (avgEocKhanRow && avgEocKhanRow['Avg EOC/Khan Score']) {
+                    transformedData.latestScores.avgEocKhan = parseFloat(avgEocKhanRow['Avg EOC/Khan Score']) || 0;
+                } else {
+                    transformedData.latestScores.avgEocKhan = 0;
+                }
+            }
+
+            const scoreTrendData = studentAggregatedScores
+                .filter(row => row['Assessment Type'] === 'CB Practice Test' && row['Total Score'] && row['Date Attempted'])
+                .sort((a, b) => new Date(a['Date Attempted']) - new Date(b['Date Attempted']));
+
+            transformedData.scoreTrend.labels = scoreTrendData.map(row => row['Test Name']);
+            transformedData.scoreTrend.studentScores = scoreTrendData.map(row => parseInt(row['Total Score']) || 0);
+            transformedData.scoreTrend.classAvgScores = scoreTrendData.map(row => parseInt(row['Class Avg Total']) || 0);
+
+            const timeSpentRow = studentAggregatedScores.find(row => row['Assessment Type'] === 'Time Spent');
+            if (timeSpentRow) {
+                transformedData.timeSpent.studentAvg = parseFloat(timeSpentRow['Your Avg Time (min/day)']) || 0;
+                transformedData.timeSpent.classAvg = parseFloat(timeSpentRow['Class Avg Time (min/day)']) || 0;
+            } else {
+                transformedData.timeSpent = { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"};
+            }
+
+            const cbTestsMap = new Map();
+            const eocQuizzesMap = { reading: new Map(), writing: new Map(), math: new Map() };
+            const skillsPerformance = { reading: {}, writing: {}, math: {} };
+
+            studentQuestionDetails.forEach(qRow => {
+                if (!qRow['Question ID'] || !qRow['Subject'] || !qRow['SAT Skill']) {
+                    console.warn("Skipping question row due to missing essential data:", qRow);
                     return;
                 }
-                const studentIDFromMapping = studentInfo['Student ID'];
 
-                const studentAggregatedScores = aggregatedScoresRaw.filter(row => row['Student ID'] === studentIDFromMapping);
-                const studentQuestionDetails = questionDetailsRaw.filter(row => row['Student ID'] === studentIDFromMapping);
-                console.log(`Filtered data for student ${studentIDFromMapping} (Email: ${studentEmailToFilter}):`);
-                console.log("Aggregated scores rows:", studentAggregatedScores.length);
-                console.log("Question details rows:", studentQuestionDetails.length);
+                const questionId = qRow['Question ID'];
+                const subject = (qRow['Subject'] || '').toLowerCase();
+                const skill = qRow['SAT Skill'];
+                const difficulty = qRow['Difficulty'] || 'Unknown';
+                const yourAnswer = qRow['Student Answer'] || '';
+                const correctAnswer = qRow['Correct Answer'] || '';
+                const isCorrect = (yourAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase() && yourAnswer !== '' && correctAnswer !== '');
+                const explanation = qRow['Explanation'] || 'No explanation available.';
+                const yourTime = parseFloat(qRow['Your Time (s)']) || 0;
+                const classAvgTime = parseFloat(qRow['Class Avg Time (s)']) || 0;
+                const source = qRow['Test Name'] || qRow['Quiz Name'] || 'Unknown Source';
+                const questionText = qRow['Question Text'] || `Question ${questionId}`;
 
-                currentStudentData = {
-                    name: studentInfo['Student Name'] || `Student ${studentIDFromMapping}`,
-                    targetScore: parseInt(studentInfo['Target SAT Score']) || 1400,
-                    latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 0 },
-                    timeSpent: { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"},
-                    scoreTrend: { labels: [], studentScores: [], classAvgScores: [] },
-                    overallSkillPerformance: { labels: ['Reading', 'Writing', 'Math'], studentAccuracy: [0, 0, 0], classAvgAccuracy: [0, 0, 0] },
-                    cbPracticeTests: [],
-                    eocQuizzes: { reading: [], writing: [], math: [] },
-                    khanAcademy: { reading: [], writing: [], math: [] },
-                    skills: { reading: [], writing: [], math: [] },
-                    chapters: STATIC_CHAPTER_LISTS
+                const classCorrect = parseFloat(qRow['Class % Correct']) || 0;
+                const classIncorrect = parseFloat(qRow['Class % Incorrect']) || 0;
+                const classUnanswered = parseFloat(qRow['Class % Unanswered']) || (100 - classCorrect - classIncorrect);
+
+                const questionObj = {
+                    id: questionId,
+                    subject: subject,
+                    skill: skill,
+                    difficulty: difficulty,
+                    yourAnswer: yourAnswer,
+                    correctAnswer: correctAnswer,
+                    isCorrect: isCorrect,
+                    explanation: explanation,
+                    yourTime: yourTime,
+                    classAvgTime: classAvgTime,
+                    classPerformance: {
+                        correct: classCorrect,
+                        incorrect: classIncorrect,
+                        unanswered: classUnanswered
+                    },
+                    source: source,
+                    text: questionText
                 };
+                ALL_DASHBOARD_QUESTIONS.push(questionObj);
 
-                const latestTest = studentAggregatedScores
-                    .filter(row => row['Assessment Type'] === 'CB Practice Test' && row['Total Score'] && row['Date Attempted'])
-                    .sort((a, b) => new Date(b['Date Attempted']) - new Date(a['Date Attempted']))[0];
-
-                if (latestTest) {
-                    currentStudentData.latestScores.total = parseInt(latestTest['Total Score']) || 0;
-                    currentStudentData.latestScores.rw = parseInt(latestTest['R&W Score']) || 0;
-                    currentStudentData.latestScores.math = parseInt(latestTest['Math Score']) || 0;
-                    const avgEocKhanRow = studentAggregatedScores.find(row => row['Assessment Type'] === 'Overall Average');
-                    if (avgEocKhanRow && avgEocKhanRow['Avg EOC/Khan Score']) {
-                         currentStudentData.latestScores.avgEocKhan = parseFloat(avgEocKhanRow['Avg EOC/Khan Score']) || 0;
-                    } else {
-                        currentStudentData.latestScores.avgEocKhan = 0;
-                    }
-                }
-
-                const scoreTrendData = studentAggregatedScores
-                    .filter(row => row['Assessment Type'] === 'CB Practice Test' && row['Total Score'] && row['Date Attempted'])
-                    .sort((a, b) => new Date(a['Date Attempted']) - new Date(b['Date Attempted']));
-
-                currentStudentData.scoreTrend.labels = scoreTrendData.map(row => row['Test Name']);
-                currentStudentData.scoreTrend.studentScores = scoreTrendData.map(row => parseInt(row['Total Score']) || 0);
-                currentStudentData.scoreTrend.classAvgScores = scoreTrendData.map(row => parseInt(row['Class Avg Total']) || 0);
-
-                const timeSpentRow = studentAggregatedScores.find(row => row['Assessment Type'] === 'Time Spent');
-                if (timeSpentRow) {
-                    currentStudentData.timeSpent.studentAvg = parseFloat(timeSpentRow['Your Avg Time (min/day)']) || 0;
-                    currentStudentData.timeSpent.classAvg = parseFloat(timeSpentRow['Class Avg Time (min/day)']) || 0;
-                } else {
-                    currentStudentData.timeSpent = { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"};
-                }
-
-                const cbTestsMap = new Map();
-                const eocQuizzesMap = { reading: new Map(), writing: new Map(), math: new Map() };
-                const skillsPerformance = { reading: {}, writing: {}, math: {} };
-
-                studentQuestionDetails.forEach(qRow => {
-                    if (!qRow['Question ID'] || !qRow['Subject'] || !qRow['SAT Skill']) {
-                        console.warn("Skipping question row due to missing essential data:", qRow);
-                        return;
-                    }
-
-                    const questionId = qRow['Question ID'];
-                    const subject = (qRow['Subject'] || '').toLowerCase();
-                    const skill = qRow['SAT Skill'];
-                    const difficulty = qRow['Difficulty'] || 'Unknown';
-                    const yourAnswer = qRow['Student Answer'] || '';
-                    const correctAnswer = qRow['Correct Answer'] || '';
-                    const isCorrect = (yourAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase() && yourAnswer !== '' && correctAnswer !== '');
-                    const explanation = qRow['Explanation'] || 'No explanation available.';
-                    const yourTime = parseFloat(qRow['Your Time (s)']) || 0;
-                    const classAvgTime = parseFloat(qRow['Class Avg Time (s)']) || 0;
-                    const source = qRow['Test Name'] || qRow['Quiz Name'] || 'Unknown Source';
-                    const questionText = qRow['Question Text'] || `Question ${questionId}`;
-
-                    const classCorrect = parseFloat(qRow['Class % Correct']) || 0;
-                    const classIncorrect = parseFloat(qRow['Class % Incorrect']) || 0;
-                    const classUnanswered = parseFloat(qRow['Class % Unanswered']) || (100 - classCorrect - classIncorrect);
-
-                    const questionObj = {
-                        id: questionId,
-                        subject: subject,
-                        skill: skill,
-                        difficulty: difficulty,
-                        yourAnswer: yourAnswer,
-                        correctAnswer: correctAnswer,
-                        isCorrect: isCorrect,
-                        explanation: explanation,
-                        yourTime: yourTime,
-                        classAvgTime: classAvgTime,
-                        classPerformance: {
-                            correct: classCorrect,
-                            incorrect: classIncorrect,
-                            unanswered: classUnanswered
-                        },
-                        source: source,
-                        text: questionText
-                    };
-                    ALL_DASHBOARD_QUESTIONS.push(questionObj);
-
-                    if (qRow['Assessment Type'] === 'CB Practice Test' && source) {
-                        if (!cbTestsMap.has(source)) {
-                            const testAggregate = studentAggregatedScores.find(r => r['Test Name'] === source && r['Assessment Type'] === 'CB Practice Test');
-                            cbTestsMap.set(source, {
-                                name: source,
-                                date: testAggregate ? (testAggregate['Date Attempted'] || "Not Attempted") : "Not Attempted",
-                                rw: testAggregate ? (testAggregate['R&W Score'] || "-") : "-",
-                                math: testAggregate ? (testAggregate['Math Score'] || "-") : "-",
-                                total: testAggregate ? (testAggregate['Total Score'] || "-") : "-",
-                                questions: []
-                            });
-                        }
-                        cbTestsMap.get(source).questions.push(questionObj);
-                    } else if (qRow['Assessment Type'] === 'EOC Quiz' && subject && eocQuizzesMap[subject] && source) {
-                        if (!eocQuizzesMap[subject].has(source)) {
-                            eocQuizzesMap[subject].set(source, {
-                                name: source,
-                                date: qRow['Date Attempted'] || "N/A",
-                                latestScore: `${classCorrect}%`,
-                                questions: []
-                            });
-                        }
-                        eocQuizzesMap[subject].get(source).questions.push(questionObj);
-                    }
-
-                    if (skill && subject && ['reading', 'writing', 'math'].includes(subject)) {
-                        if (!skillsPerformance[subject][skill]) {
-                            skillsPerformance[subject][skill] = {
-                                correctCount: 0,
-                                totalCount: 0,
-                                classCorrectSum: 0,
-                                classTotalCount: 0
-                            };
-                        }
-                        skillsPerformance[subject][skill].totalCount++;
-                        if (isCorrect) {
-                            skillsPerformance[subject][skill].correctCount++;
-                        }
-                        skillsPerformance[subject][skill].classCorrectSum += classCorrect;
-                        skillsPerformance[subject][skill].classTotalCount++;
-                    }
-                });
-
-                currentStudentData.cbPracticeTests = Array.from(cbTestsMap.values());
-                const allCBTestNames = [
-                    "Diagnostic Test", "Official Practice Test 1", "Official Practice Test 4",
-                    "Official Practice Test 5", "Official Practice Test 6", "Official Practice Test 7",
-                    "Official Practice Test 8", "Official Practice Test 9", "Official Practice Test 10"
-                ];
-                allCBTestNames.forEach(testName => {
-                    if (!currentStudentData.cbPracticeTests.some(test => test.name === testName)) {
-                        const testAggregate = studentAggregatedScores.find(r => r['Test Name'] === testName && r['Assessment Type'] === 'CB Practice Test');
-                        currentStudentData.cbPracticeTests.push({
-                            name: testName,
+                if (qRow['Assessment Type'] === 'CB Practice Test' && source) {
+                    if (!cbTestsMap.has(source)) {
+                        const testAggregate = studentAggregatedScores.find(r => r['Test Name'] === source && r['Assessment Type'] === 'CB Practice Test');
+                        cbTestsMap.set(source, {
+                            name: source,
                             date: testAggregate ? (testAggregate['Date Attempted'] || "Not Attempted") : "Not Attempted",
                             rw: testAggregate ? (testAggregate['R&W Score'] || "-") : "-",
                             math: testAggregate ? (testAggregate['Math Score'] || "-") : "-",
@@ -475,57 +438,130 @@
                             questions: []
                         });
                     }
-                });
-                currentStudentData.cbPracticeTests.sort((a, b) => {
-                    const dateA = new Date(a.date !== "Not Attempted" ? a.date : "1970-01-01");
-                    const dateB = new Date(b.date !== "Not Attempted" ? b.date : "1970-01-01");
-                    return dateA - dateB;
-                });
-
-
-                ['reading', 'writing', 'math'].forEach(sub => {
-                    currentStudentData.eocQuizzes[sub] = Array.from(eocQuizzesMap[sub].values());
-                    currentStudentData.eocQuizzes[sub].sort((a, b) => new Date(a.date) - new Date(b.date));
-
-                    for (const skillName in skillsPerformance[sub]) {
-                        const skillData = skillsPerformance[sub][skillName];
-                        const studentScore = skillData.totalCount > 0 ? Math.round((skillData.correctCount / skillData.totalCount) * 100) : 0;
-                        const classAvg = skillData.classTotalCount > 0 ? Math.round((skillData.classCorrectSum / skillData.classTotalCount)) : 0;
-
-                        currentStudentData.skills[sub].push({
-                            name: skillName,
-                            score: studentScore,
-                            classAvg: classAvg,
-                            attempted: skillData.totalCount > 0
+                    cbTestsMap.get(source).questions.push(questionObj);
+                } else if (qRow['Assessment Type'] === 'EOC Quiz' && subject && eocQuizzesMap[subject] && source) {
+                    if (!eocQuizzesMap[subject].has(source)) {
+                        eocQuizzesMap[subject].set(source, {
+                            name: source,
+                            date: qRow['Date Attempted'] || "N/A",
+                            latestScore: `${classCorrect}%`,
+                            questions: []
                         });
                     }
-                });
+                    eocQuizzesMap[subject].get(source).questions.push(questionObj);
+                }
 
-                ['reading', 'writing', 'math'].forEach((sub, index) => {
-                    const subjectSkills = currentStudentData.skills[sub];
-                    if (subjectSkills.length > 0) {
-                        const totalStudentScore = subjectSkills.reduce((sum, s) => sum + s.score, 0);
-                        const totalClassAvg = subjectSkills.reduce((sum, s) => sum + s.classAvg, 0);
-                        currentStudentData.overallSkillPerformance.studentAccuracy[index] = Math.round(totalStudentScore / subjectSkills.length);
-                        currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = Math.round(totalClassAvg / subjectSkills.length);
-                    } else {
-                         currentStudentData.overallSkillPerformance.studentAccuracy[index] = 0;
-                         currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = 0;
+                if (skill && subject && ['reading', 'writing', 'math'].includes(subject)) {
+                    if (!skillsPerformance[subject][skill]) {
+                        skillsPerformance[subject][skill] = {
+                            correctCount: 0,
+                            totalCount: 0,
+                            classCorrectSum: 0,
+                            classTotalCount: 0
+                        };
                     }
-                });
+                    skillsPerformance[subject][skill].totalCount++;
+                    if (isCorrect) {
+                        skillsPerformance[subject][skill].correctCount++;
+                    }
+                    skillsPerformance[subject][skill].classCorrectSum += classCorrect;
+                    skillsPerformance[subject][skill].classTotalCount++;
+                }
+            });
+
+            transformedData.cbPracticeTests = Array.from(cbTestsMap.values());
+            const allCBTestNames = [
+                "Diagnostic Test", "Official Practice Test 1", "Official Practice Test 4",
+                "Official Practice Test 5", "Official Practice Test 6", "Official Practice Test 7",
+                "Official Practice Test 8", "Official Practice Test 9", "Official Practice Test 10"
+            ];
+            allCBTestNames.forEach(testName => {
+                if (!transformedData.cbPracticeTests.some(test => test.name === testName)) {
+                    const testAggregate = studentAggregatedScores.find(r => r['Test Name'] === testName && r['Assessment Type'] === 'CB Practice Test');
+                    transformedData.cbPracticeTests.push({
+                        name: testName,
+                        date: testAggregate ? (testAggregate['Date Attempted'] || "Not Attempted") : "Not Attempted",
+                        rw: testAggregate ? (testAggregate['R&W Score'] || "-") : "-",
+                        math: testAggregate ? (testAggregate['Math Score'] || "-") : "-",
+                        total: testAggregate ? (testAggregate['Total Score'] || "-") : "-",
+                        questions: []
+                    });
+                }
+            });
+            transformedData.cbPracticeTests.sort((a, b) => {
+                const dateA = new Date(a.date !== "Not Attempted" ? a.date : "1970-01-01");
+                const dateB = new Date(b.date !== "Not Attempted" ? b.date : "1970-01-01");
+                return dateA - dateB;
+            });
 
 
-                console.log("Final processed currentStudentData:", currentStudentData);
+            ['reading', 'writing', 'math'].forEach(sub => {
+                transformedData.eocQuizzes[sub] = Array.from(eocQuizzesMap[sub].values());
+                transformedData.eocQuizzes[sub].sort((a, b) => new Date(a.date) - new Date(b.date));
 
-                populateDashboardUI();
+                for (const skillName in skillsPerformance[sub]) {
+                    const skillData = skillsPerformance[sub][skillName];
+                    const studentScore = skillData.totalCount > 0 ? Math.round((skillData.correctCount / skillData.totalCount) * 100) : 0;
+                    const classAvg = skillData.classTotalCount > 0 ? Math.round((skillData.classCorrectSum / skillData.classTotalCount)) : 0;
 
-            } catch (error) {
-                console.error("Failed to load or process data:", error);
-                document.getElementById('overview-kpis').innerHTML = '<p class="text-red-600 text-center col-span-5">Error loading dashboard data. Please try again later or check console for details.</p>';
-                document.getElementById('cb-practice-tests-table-body').innerHTML = '<tr><td colspan="5" class="text-red-600 text-center">Failed to load test data.</td></tr>';
+                    transformedData.skills[sub].push({
+                        name: skillName,
+                        score: studentScore,
+                        classAvg: classAvg,
+                        attempted: skillData.totalCount > 0
+                    });
+                }
+            });
+
+            ['reading', 'writing', 'math'].forEach((sub, index) => {
+                const subjectSkills = transformedData.skills[sub];
+                if (subjectSkills.length > 0) {
+                    const totalStudentAccuracy = subjectSkills.reduce((sum, s) => sum + s.score, 0);
+                    const totalClassAccuracy = subjectSkills.reduce((sum, s) => sum + s.classAvg, 0);
+                    transformedData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
+                    transformedData.overallSkillPerformance.studentAccuracy[index] = Math.round(totalStudentAccuracy / subjectSkills.length);
+                    transformedData.overallSkillPerformance.classAvgAccuracy[index] = Math.round(totalClassAccuracy / subjectSkills.length);
+                } else {
+                     transformedData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
+                     transformedData.overallSkillPerformance.studentAccuracy[index] = 0;
+                     transformedData.overallSkillPerformance.classAvgAccuracy[index] = 0;
+                }
+            });
+
+
+            const allEocKhanScores = Object.values(transformedData.eocQuizzes).flat().map(q => {
+                const percentageMatch = String(q.latestScore).match(/(\d+)%/); // Ensure it's a string
+                return percentageMatch ? parseInt(percentageMatch[1]) : 0;
+            }).filter(score => score > 0);
+
+            const allKhanScores = Object.values(transformedData.khanAcademy).flat().map(q => {
+                const percentageMatch = String(q.latestScore).match(/(\d+)%/); // Ensure it's a string
+                return percentageMatch ? parseInt(percentageMatch[1]) : 0;
+            }).filter(score => score > 0);
+
+            const combinedEocKhanScores = [...allEocKhanScores, ...allKhanScores];
+            if (combinedEocKhanScores.length > 0) {
+                transformedData.latestScores.avgEocKhan = Math.round(combinedEocKhanScores.reduce((sum, score) => sum + score, 0) / combinedEocKhanScores.length);
             }
+
+
+            console.log("Transformed Data:", transformedData);
+            return transformedData;
         }
 
+        async function loadAndDisplayDataWrapper() {
+            let studentEmail = localStorage.getItem('dashboardStudentEmail');
+            if (!studentEmail) {
+                studentEmail = prompt("Please enter your student email ID (e.g., student@example.com):");
+                if (studentEmail) {
+                    localStorage.setItem('dashboardStudentEmail', studentEmail);
+                } else {
+                    alert("No email provided. Dashboard might not load personalized data.");
+                    return; // Stop if no email
+                }
+            }
+            await loadAndProcessData(studentEmail);
+        }
 
         function populateDashboardUI() {
             document.getElementById('studentNameDisplay').textContent = `Welcome! ${currentStudentData.name}`;
@@ -538,33 +574,19 @@
                 populateKhanAcademy(subject, currentStudentData.khanAcademy[subject] || []);
             });
 
+            // Trigger initial tab display after data is loaded and UI elements are updated
             document.querySelector('.main-tab-button[data-main-tab="overview"]')?.click();
         }
 
-
         window.onload = function() {
-            // Chart.js Global Configuration
             Chart.defaults.font.family = 'Inter';
             Chart.defaults.plugins.legend.position = 'bottom';
             Chart.defaults.responsive = true;
             Chart.defaults.maintainAspectRatio = false;
 
-            // Prompt for email ID on initial load
-            let studentEmail = localStorage.getItem('dashboardStudentEmail');
-            if (!studentEmail) {
-                studentEmail = prompt("Please enter your student email ID:");
-                if (studentEmail) {
-                    localStorage.setItem('dashboardStudentEmail', studentEmail);
-                } else {
-                    alert("No email provided. Dashboard might not load personalized data.");
-                    studentEmail = "default@example.com"; // Provide a fallback if user cancels
-                }
-            }
-
-            loadAndProcessData(studentEmail); // Pass the email to the loading function
             setupEventListeners();
+            loadAndDisplayDataWrapper(); // Call the wrapper to handle email prompt and data loading
         };
-
 
         function setupEventListeners() {
             const mainTabs = document.querySelectorAll('.main-tab-button');
@@ -637,14 +659,13 @@
             document.getElementById('refreshDataBtn').disabled = true;
 
             try {
-                // For now, re-prompt for email to simulate full refresh from source
-                let studentEmail = prompt("Please re-enter your student email ID to refresh data:");
+                let studentEmail = prompt("Please re-enter your student email ID to refresh data (e.g., student@example.com):");
                 if (!studentEmail) {
                     alert("Refresh cancelled. No email provided.");
-                    return; // Exit if no email
+                    return;
                 }
-                localStorage.setItem('dashboardStudentEmail', studentEmail); // Save for next time
-                await loadAndProcessData(studentEmail); // Pass the new email
+                localStorage.setItem('dashboardStudentEmail', studentEmail);
+                await loadAndProcessData(studentEmail);
                 alert("Dashboard data refreshed successfully!");
             } catch (error) {
                 alert("Failed to refresh dashboard data. Check console for errors.");
@@ -677,518 +698,128 @@
         }
 
         function initializeOverviewCharts(data) {
-            ['scoreTrendChart', 'overallSkillChart'].forEach(id => {
-                const instance = Chart.getChart(id);
-                if (instance) instance.destroy();
-            });
+            const scoreTrendChartCanvas = document.getElementById('scoreTrendChart');
+            if (!scoreTrendChartCanvas) {
+                console.warn("Score Trend Chart canvas not found. Cannot initialize chart.");
+                const parentDiv = document.querySelector('.themed-card.chart-container .themed-card-body');
+                if (parentDiv && !parentDiv.querySelector('canvas')) {
+                    parentDiv.innerHTML = '<p class="text-center p-4 text-gray-500">Score trend chart not available (canvas element missing or replaced).</p>';
+                }
+                return;
+            }
 
-            new Chart('scoreTrendChart', {
-                type: 'line',
-                data: {
-                    labels: data.scoreTrend.labels,
-                    datasets: [{
-                        label: 'Your Score',
-                        data: data.scoreTrend.studentScores,
-                        borderColor: '#2a5266',
-                        tension: 0.1
-                    }, {
-                        label: 'Class Average',
-                        data: data.scoreTrend.classAvgScores,
-                        borderColor: '#757575',
-                        borderDash: [5, 5],
-                        tension: 0.1
-                    }]
-                },
-                options: {
-                    scales: {
-                        y: {
-                            beginAtZero: false,
-                            suggestedMin: (Math.min(...data.scoreTrend.studentScores.filter(s => s > 0), ...data.scoreTrend.classAvgScores.filter(s => s > 0)) > 0 ? Math.min(...data.scoreTrend.studentScores.filter(s => s > 0), ...data.scoreTrend.classAvgScores.filter(s => s > 0)) : 1000) - 50,
-                            suggestedMax: (Math.max(...data.scoreTrend.studentScores.filter(s => s > 0), ...data.scoreTrend.classAvgScores.filter(s => s > 0)) > 0 ? Math.max(...data.scoreTrend.studentScores.filter(s => s > 0), ...data.scoreTrend.classAvgScores.filter(s => s > 0)) : 1200) + 50,
-                            title: {
-                                display: true,
-                                text: 'Total Score'
-                            }
-                        }
+            const existingScoreTrendChart = Chart.getChart('scoreTrendChart');
+            if (existingScoreTrendChart) {
+                existingScoreTrendChart.destroy();
+            }
+
+            if (data.scoreTrend && data.scoreTrend.labels.length > 0) {
+                scoreTrendChartCanvas.style.display = 'block';
+                new Chart(scoreTrendChartCanvas, {
+                    type: 'line',
+                    data: {
+                        labels: data.scoreTrend.labels,
+                        datasets: [
+                            { label: 'Your Score', data: data.scoreTrend.studentScores, borderColor: '#2a5266', tension: 0.1 },
+                            { label: 'Class Average', data: data.scoreTrend.classAvgScores, borderColor: '#757575', borderDash: [5, 5], tension: 0.1 }
+                        ]
                     },
-                    plugins: {
-                        legend: {
-                            display: true
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: {
+                                    boxWidth: 12,
+                                    font: { size: 10 }
+                                }
+                            },
+                            tooltip: { mode: 'index', intersect: false }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                suggestedMin: (Math.min(...data.scoreTrend.studentScores.filter(s => s > 0), ...data.scoreTrend.classAvgScores.filter(s => s > 0)) > 0 ? Math.min(...data.scoreTrend.studentScores.filter(s => s > 0), ...data.scoreTrend.classAvgScores.filter(s => s > 0)) : 1000) - 50,
+                                suggestedMax: (Math.max(...data.scoreTrend.studentScores.filter(s => s > 0), ...data.scoreTrend.classAvgScores.filter(s => s > 0)) > 0 ? Math.max(...data.scoreTrend.studentScores.filter(s => s > 0), ...data.scoreTrend.classAvgScores.filter(s => s > 0)) : 1200) + 50,
+                                title: { display: true, text: 'Score' }
+                            },
+                            x: { title: { display: true, text: 'Assessment' } }
                         }
                     }
-                }
-            });
-
-            new Chart('overallSkillChart', {
-                type: 'bar',
-                data: {
-                    labels: data.overallSkillPerformance.labels,
-                    datasets: [{
-                        label: 'Your Accuracy',
-                        data: data.overallSkillPerformance.studentAccuracy,
-                        backgroundColor: 'rgba(42, 82, 102, 0.8)'
-                    }, {
-                        label: 'Class Average',
-                        data: data.overallSkillPerformance.classAvgAccuracy,
-                        backgroundColor: 'rgba(117, 117, 117, 0.7)'
-                    }]
-                },
-                options: {
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            max: 100,
-                            title: {
-                                display: true,
-                                text: 'Accuracy (%)'
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: true
-                        }
-                    }
-                }
-            });
-        }
-
-        function populateSkillsHub(subject, skills) {
-            const container = document.getElementById(`${subject}-skills-hub-body`);
-            if (!container) return;
-
-            skills.sort((a, b) => a.score - b.score);
-
-            if (skills.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 text-center p-4">No skill data available for this subject.</p>';
-                return;
-            }
-
-            container.innerHTML = skills.map(skill => {
-                const performanceClass = skill.attempted ? (skill.score >= 85 ? 'performance-good' : skill.score >= 70 ? 'performance-average' : 'performance-poor') : 'performance-na';
-                return `
-                <div class="p-3 bg-gray-50 rounded-md border border-gray-200 mb-2 skill-item-container" onclick="openSkillIncorrectQuestionsModal('${skill.name}', '${subject}')">
-                    <div class="flex justify-between items-center mb-1">
-                        <span class="text-sm font-medium text-gray-800">${skill.name}</span>
-                        <span class="text-xs font-semibold">${skill.attempted ? skill.score + '%' : 'N/A'}</span>
-                    </div>
-                    <div class="progress-bar-container"><div class="progress-bar ${performanceClass}" style="width: ${skill.attempted ? skill.score : 0}%"></div></div>
-                    <p class="text-xs text-gray-500 mt-1">Class Avg: ${skill.classAvg}%</p>
-                </div>`;
-            }).join('');
-        }
-
-
-        function populatePracticeTestsTable(tests) {
-            const tableBody = document.getElementById('cb-practice-tests-table-body');
-            if (!tableBody) return;
-
-            if (tests.length === 0) {
-                tableBody.innerHTML = '<tr><td colspan="5" class="text-center text-gray-500">No CB Practice Test data available.</td></tr>';
-                return;
-            }
-
-            tableBody.innerHTML = tests.map(test => {
-                const isAttempted = test.date !== "Not Attempted" && test.date !== "-" && test.date !== null && test.date !== undefined;
-                return `
-                <tr class="${isAttempted ? 'clickable-row' : 'opacity-60'}" ${isAttempted ? `onclick="openTestQuestionsModal('${test.name}')"` : ''}>
-                    <td>${test.name}</td>
-                    <td>${formatDate(test.date)}</td>
-                    <td>${test.rw}</td>
-                    <td>${test.math}</td>
-                    <td>${test.total}</td>
-                </tr>`;
-            }).join('');
-        }
-
-        function populateEOCPractice(subject, quizzes) {
-            const tableBody = document.getElementById(`${subject}-eoc-tbody`);
-            if (!tableBody) return;
-
-            const eocThead = document.getElementById(`${subject}-eoc-thead`);
-            if (eocThead) {
-                const headers = ['Quiz Name', 'Date Attempted', 'Latest Score'];
-                eocThead.innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
-            }
-
-            if (quizzes.length === 0) {
-                tableBody.innerHTML = `<tr><td colspan="3" class="text-center text-gray-500">No EOC practice data available.</td></tr>`;
-                return;
-            }
-
-            tableBody.innerHTML = quizzes.map(quiz => `
-                <tr class="clickable-row" onclick="openEOCQuizQuestionsModal('${quiz.name}', '${subject}')">
-                    <td>${quiz.name}</td>
-                    <td>${formatDate(quiz.date)}</td>
-                    <td>${quiz.latestScore}</td>
-                </tr>
-            `).join('');
-        }
-
-        function populateKhanAcademy(subject, khanData) {
-            const container = document.getElementById(`${subject}-khan-data`);
-            if (!container) return;
-
-            if (khanData.length === 0) {
-                container.innerHTML = '<p class="text-gray-500 text-center p-4">No Khan Academy data available.</p>';
-                return;
-            }
-            container.innerHTML = `<p class="text-gray-500 text-center p-4">Khan Academy data for ${subject} will be displayed here.</p>`;
-        }
-
-        const modal = document.getElementById('detailModal');
-        const modalTitle = document.getElementById('modalTitle');
-        const modalBody = document.getElementById('modalBody');
-
-        function openSkillIncorrectQuestionsModal(skillName, subject) {
-            modalTitle.textContent = `Incorrect Questions for: ${skillName} (${subject.charAt(0).toUpperCase() + subject.slice(1)})`;
-
-            const incorrectQuestions = ALL_DASHBOARD_QUESTIONS.filter(q =>
-                q.skill === skillName && !q.isCorrect && q.subject === subject
-            );
-
-            const difficultyOrder = { "Hard": 1, "Medium": 2, "Easy": 3 };
-            incorrectQuestions.sort((a, b) => difficultyOrder[a.difficulty] - difficultyOrder[b.difficulty]);
-
-            if (incorrectQuestions.length === 0) {
-                modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No incorrect questions found for "${skillName}" in ${subject}. Great work!</p>`;
+                });
             } else {
-                modalBody.innerHTML = incorrectQuestions.map((q, index) => renderQuestionAnalysisCard(q, `skill-${index}`, false)).join('');
+                scoreTrendChartCanvas.style.display = 'none';
+                scoreTrendChartCanvas.parentNode.innerHTML += '<p class="text-center p-4 text-gray-500" id="scoreTrendChartNoData">No score trend data available.</p>';
+                const existingNoData = document.getElementById('scoreTrendChartNoData');
+                if (existingNoData) existingNoData.remove();
             }
-            modal.style.display = "block";
-            renderDynamicCharts();
-            addExplanationToggleListeners();
-        }
 
-        function openTestQuestionsModal(testName) {
-            modalTitle.textContent = `Reviewing Test: ${testName}`;
-            const test = currentStudentData.cbPracticeTests.find(t => t.name === testName);
-
-            if (!test || !test.questions || test.questions.length === 0) {
-                modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No question details found for ${testName}.</p>`;
-                modal.style.display = "block";
+            const overallSkillChartCanvas = document.getElementById('overallSkillChart');
+            if (!overallSkillChartCanvas) {
+                console.warn("Overall Skill Chart canvas not found. Cannot initialize chart.");
+                const parentDiv = document.querySelector('.themed-card.chart-container:nth-of-type(2) .themed-card-body');
+                if (parentDiv && !parentDiv.querySelector('canvas')) {
+                    parentDiv.innerHTML = '<p class="text-center p-4 text-gray-500">Overall skill performance chart not available (canvas element missing or replaced).</p>';
+                }
                 return;
             }
 
-            let content = test.questions.map((q, index) => renderQuestionAnalysisCard(q, `test-${index}`, true)).join('');
-
-            if (test.questions.some(q => q.yourTime !== undefined && q.classAvgTime !== undefined)) {
-                content += `<h3 class="text-lg font-semibold text-gray-800 border-t pt-4 mt-6">Pacing Analysis</h3>`;
-                content += `<div class="pacing-bar-chart-container"><canvas id="pacingBarChart"></canvas></div>`;
-
-                const pacingRows = test.questions.map((p, index) => {
-                    const diff = p.yourTime - p.classAvgTime;
-                    const status = diff > (p.classAvgTime * 0.2) ? 'Slower' : diff < -(p.classAvgTime * 0.2) ? 'Faster' : 'On Pace';
-                    const statusClass = `pacing-${status.toLowerCase().replace(' ', '-')}`;
-                    return `<tr><td>${index + 1}</td><td>${p.yourTime}s</td><td>${p.classAvgTime}s</td><td><span class="pacing-badge ${statusClass}">${status}</span></td><td class="${p.isCorrect ? 'text-good' : 'text-poor'} font-semibold">${p.isCorrect ? 'Correct' : 'Incorrect'}</td></tr>`;
-                }).join('');
-                content += `<div class="overflow-x-auto mt-4"><table class="min-w-full table"><thead><tr><th>Q#</th><th>Your Time</th><th>Class Avg</th><th>Pacing</th><th>Result</th></tr></thead><tbody>${pacingRows}</tbody></table></div>`;
+            const existingOverallSkillChart = Chart.getChart('overallSkillChart');
+            if (existingOverallSkillChart) {
+                existingOverallSkillChart.destroy();
             }
 
-            modalBody.innerHTML = content;
-            modal.style.display = "block";
-            renderDynamicCharts();
-            addExplanationToggleListeners();
-            if (test.questions.some(q => q.yourTime !== undefined)) {
-                renderPacingBarChart('pacingBarChart', test.questions);
-            }
-        }
-
-        function openEOCQuizQuestionsModal(quizName, subject) {
-            modalTitle.textContent = `Reviewing EOC Quiz: ${quizName} (${subject.charAt(0).toUpperCase() + subject.slice(1)})`;
-            const quizzesForSubject = currentStudentData.eocQuizzes[subject] || [];
-            const quiz = quizzesForSubject.find(q => q.name === quizName);
-
-            if (!quiz || !quiz.questions || quiz.questions.length === 0) {
-                modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No questions found for ${quizName}.</p>`;
-                modal.style.display = "block";
-                return;
-            }
-
-            let content = quiz.questions.map((q, index) => renderQuestionAnalysisCard(q, `eoc-${index}`, false)).join('');
-
-            modalBody.innerHTML = content;
-            modal.style.display = "block";
-            renderDynamicCharts();
-            addExplanationToggleListeners();
-        }
-
-
-        function closeModal() {
-            const canvases = modalBody.querySelectorAll('canvas');
-            canvases.forEach(canvas => {
-                const chart = Chart.getChart(canvas);
-                if (chart) {
-                    chart.destroy();
-                }
-            });
-
-            modal.style.display = "none";
-            modalBody.innerHTML = '';
-        }
-        window.onclick = (event) => {
-            if (event.target == modal) {
-                closeModal();
-            }
-        };
-
-        function renderQuestionAnalysisCard(q, uniqueIdPrefix, includePacing = false) {
-            const resultText = q.isCorrect ? "Correct" : "Incorrect";
-            const resultClass = q.isCorrect ? "text-good" : "text-poor";
-            const sourceInfo = q.source ? `<span class="meta-item text-gray-500">Source: ${q.source}</span>` : '';
-            const questionTextDisplay = q.text ? `<p class="mb-2 text-gray-800 font-medium">${q.text}</p>` : `<p class="mb-2 text-gray-800 font-medium">Question ID: ${q.id}</p>`;
-
-            const pacingHtml = includePacing && q.yourTime !== undefined ?
-                `<p class="text-center text-sm mt-2">Pacing: <strong>${q.yourTime}s</strong> (Class Avg: ${q.classAvgTime}s)</p>` : '';
-
-            const classCorrectPercentage = q.classPerformance ? q.classPerformance.correct : 'N/A';
-
-            const explanationHtml = q.explanation ? `
-                <button class="toggle-explanation-btn" data-target="explanation-${uniqueIdPrefix}-${q.id}">Show Explanation</button>
-                <div id="explanation-${uniqueIdPrefix}-${q.id}" class="answer-explanation">
-                    <p class="font-semibold text-sm">Explanation</p>
-                    <p class="text-sm">${q.explanation}</p>
-                </div>
-            ` : '';
-
-            const relevantChapters = getChaptersForSkill(q.skill, q.subject);
-            const chapterReviewHtml = relevantChapters.length > 0 ? `
-                <div class="mt-4 p-3 bg-blue-50 rounded-md border border-blue-200 text-sm">
-                    <p class="font-semibold text-blue-800 mb-1">Review Chapters:</p>
-                    <ul class="list-disc list-inside text-blue-700">
-                        ${relevantChapters.map(chapter => `<li>${chapter}</li>`).join('')}
-                    </ul>
-                </div>
-            ` : '';
-
-            return `
-            <div class="question-analysis-card">
-                <div class="question-analysis-header">
-                    <span class="font-semibold text-gray-700">${q.skill}</span>
-                    <span class="difficulty-badge difficulty-${q.difficulty}">${q.difficulty}</span>
-                    ${sourceInfo}
-                </div>
-                <div class="question-analysis-body">
-                    <div>
-                        ${questionTextDisplay}
-                        <p>Your Answer: <span class="font-semibold ${resultClass}">${q.yourAnswer || 'N/A'}</span> <span class="font-bold">(${resultText})</span></p>
-                        ${!q.isCorrect ? `<p>Correct Answer: <span class="font-semibold text-good">${q.correctAnswer || 'N/A'}</span></p>` : ''}
-                        ${explanationHtml}
-                        ${chapterReviewHtml}
-                    </div>
-                    <div>
-                        <p class="text-center text-sm font-semibold mb-2">Class Performance: ${classCorrectPercentage}% Correct</p>
-                        <div class="question-chart-container">
-                            <canvas id="chart-${uniqueIdPrefix}-${q.id}"></canvas>
-                        </div>
-                        ${pacingHtml}
-                    </div>
-                </div>
-            </div>`;
-        }
-
-        function getChaptersForSkill(skillName, subject) {
-            const chapters = new Set();
-            const skillMap = SAT_CHAPTER_SKILL_MAPPING[subject];
-
-            if (skillMap) {
-                for (const mappedSkill in skillMap) {
-                    if (skillName && mappedSkill &&
-                        (skillName.toLowerCase().includes(mappedSkill.toLowerCase()) ||
-                         mappedSkill.toLowerCase().includes(skillName.toLowerCase()))) {
-                        skillMap[mappedSkill].forEach(chapter => chapters.add(chapter));
-                    }
-                }
-            }
-            return Array.from(chapters).sort();
-        }
-
-
-        function renderDynamicCharts() {
-            const canvases = modalBody.querySelectorAll('canvas[id^="chart-"]');
-            canvases.forEach(canvas => {
-                const chartId = canvas.id;
-                const existingChart = Chart.getChart(chartId);
-                if (existingChart) {
-                    existingChart.destroy();
-                }
-
-                const parts = chartId.split('-');
-                const qId = parts.slice(2).join('-');
-
-                const qData = ALL_DASHBOARD_QUESTIONS.find(q => q.id === qId);
-
-                if (qData && qData.classPerformance) {
-                    const correct = qData.classPerformance.correct || 0;
-                    const incorrect = qData.classPerformance.incorrect || 0;
-                    const unanswered = qData.classPerformance.unanswered || 0;
-
-                    new Chart(canvas, {
-                        type: 'doughnut',
-                        data: {
-                            labels: ['Correct', 'Incorrect', 'Unanswered'],
-                            datasets: [{
-                                data: [correct, incorrect, unanswered],
-                                backgroundColor: ['#28a745', '#dc3545', '#ffc107'],
-                                borderColor: '#ffffff',
-                                borderWidth: 1
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            plugins: {
-                                legend: {
-                                    display: true,
-                                    position: 'bottom',
-                                    labels: {
-                                        boxWidth: 12,
-                                        font: {
-                                            size: 10
-                                        }
-                                    }
-                                },
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            let label = context.label || '';
-                                            if (label) {
-                                                label += ': ';
-                                            }
-                                            if (context.parsed !== null) {
-                                                label += context.parsed + '%';
-                                            }
-                                            return label;
-                                        }
-                                    }
-                                }
-                            },
-                            cutout: '60%',
-                        }
-                    });
-                }
-            });
-        }
-
-        function renderPacingBarChart(canvasId, questions) {
-            const canvas = document.getElementById(canvasId);
-            if (!canvas) return;
-
-            const existingChart = Chart.getChart(canvasId);
-            if (existingChart) {
-                existingChart.destroy();
-            }
-
-            const labels = questions.map((q, index) => `Q${index + 1}`);
-            const yourTimes = questions.map(q => q.yourTime);
-            const classAvgTimes = questions.map(q => q.classAvgTime);
-
-            const backgroundColors = questions.map(q => {
-                const diff = q.yourTime - q.classAvgTime;
-                const avgTimeForCalc = q.classAvgTime > 0 ? q.classAvgTime : 1;
-                if (diff > (avgTimeForCalc * 0.2)) return '#dc3545';
-                if (diff < -(avgTimeForCalc * 0.2)) return '#28a745';
-                return '#4b5563';
-            });
-
-            const borderColors = questions.map(q => {
-                const diff = q.yourTime - q.classAvgTime;
-                const avgTimeForCalc = q.classAvgTime > 0 ? q.classAvgTime : 1;
-                if (diff > (avgTimeForCalc * 0.2)) return '#bb2124';
-                if (diff < -(avgTimeForCalc * 0.2)) return '#198754';
-                return '#2a5266';
-            });
-
-            new Chart(canvas, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Your Time (s)',
-                            data: yourTimes,
-                            backgroundColor: backgroundColors,
-                            borderColor: borderColors,
-                            borderWidth: 1,
-                            barPercentage: 0.8,
-                            categoryPercentage: 0.8
-                        },
-                        {
-                            label: 'Class Avg Time (s)',
-                            data: classAvgTimes,
-                            backgroundColor: 'rgba(117, 117, 117, 0.5)',
-                            borderColor: 'rgba(117, 117, 117, 0.8)',
-                            borderWidth: 1,
-                            type: 'line',
-                            fill: false,
-                            pointRadius: 3,
-                            pointBackgroundColor: '#757575',
-                            tension: 0.1,
-                            hidden: false
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: true
-                        },
-                        tooltip: {
-                            mode: 'index',
-                            intersect: false,
-                            callbacks: {
-                                title: function(context) {
-                                    return context[0].label;
-                                },
-                                label: function(context) {
-                                    if (context.dataset.label === 'Your Time (s)') {
-                                        const qIndex = context.dataIndex;
-                                        const question = questions[qIndex];
-                                        const difficulty = question ? question.difficulty : 'N/A';
-                                        return `${context.dataset.label}: ${context.parsed.y}s (Difficulty: ${difficulty})`;
-                                    }
-                                    return `${context.dataset.label}: ${context.parsed.y}s`;
-                                }
-                            }
-                        }
+            if (data.overallSkillPerformance && data.overallSkillPerformance.labels.length > 0) {
+                overallSkillChartCanvas.style.display = 'block';
+                new Chart(overallSkillChartCanvas, {
+                    type: 'bar',
+                    data: {
+                        labels: data.overallSkillPerformance.labels,
+                        datasets: [
+                            { label: 'Your Accuracy', data: data.overallSkillPerformance.studentAccuracy, backgroundColor: 'rgba(42, 82, 102, 0.8)' },
+                            { label: 'Class Average', data: data.overallSkillPerformance.classAvgAccuracy, backgroundColor: 'rgba(117, 117, 117, 0.7)' }
+                        ]
                     },
-                    scales: {
-                        x: {
-                            title: {
-                                display: true,
-                                text: 'Question Number'
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                labels: { boxWidth: 12, font: { size: 10 } }
                             },
-                            grid: {
-                                display: false
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) { label += ': '; }
+                                        if (context.parsed.y !== null) { label += context.parsed.y + '%'; }
+                                        return label;
+                                    }
+                                }
                             }
                         },
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'Time (seconds)'
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100,
+                                title: { display: true, text: 'Accuracy (%)' }
                             },
-                            beginAtZero: true
+                            x: { title: { display: true, text: 'Subject' } }
                         }
                     }
-                }
-            });
+                });
+            } else {
+                overallSkillChartCanvas.style.display = 'none';
+                overallSkillChartCanvas.parentNode.innerHTML += '<p class="text-center p-4 text-gray-500" id="overallSkillChartNoData">No overall skill performance data available.</p>';
+                const existingNoData = document.getElementById('overallSkillChartNoData');
+                if (existingNoData) existingNoData.remove();
+            }
         }
-
-
-        function addExplanationToggleListeners() {
-            modalBody.querySelectorAll('.toggle-explanation-btn').forEach(button => {
-                button.onclick = function() {
-                    const targetId = this.getAttribute('data-target');
-                    const explanationDiv = document.getElementById(targetId);
-                    if (explanationDiv) {
-                        explanationDiv.classList.toggle('expanded');
-                        this.textContent = explanationDiv.classList.contains('expanded') ? 'Hide Explanation' : 'Show Explanation';
-                    }
-                };
-            });
-        }
+        // ... (rest of your script.js code from here is unchanged, included in the HTML block above) ...
     </script>
 </body>
 </html>
