@@ -308,7 +308,7 @@
         };
 
         // --- MAIN DATA LOADING AND TRANSFORMATION ---
-        window.loadAndProcessData = async function(studentIdentifier) { // Changed to studentIdentifier for flexibility
+        window.loadAndProcessData = async function(studentIdentifier) {
             console.log("Starting data loading and processing for:", studentIdentifier);
 
             try {
@@ -322,30 +322,35 @@
                 console.log("Raw student mapping:", studentMappingRaw.length, "rows.");
 
                 let studentInfo = null;
-                let studentGmailIDForFilter = null; // Declare here to ensure scope
+                let studentGmailIDForFilter = null;
 
-                // First, try to find student in studentMapping by email or Student ID
-                // Note: StudentEmail_Canvas is the column name in Student_Mapping
-                studentInfo = studentMappingRaw.find(s => s['Student Email_Canvas'] === studentIdentifier || s['Student ID_Canvas'] === studentIdentifier); 
+                // Attempt to find student in studentMapping by email or Canvas ID
+                studentInfo = studentMappingRaw.find(s => s['Student Email_Canvas'] === studentIdentifier || s['StudentID_Canvas'] === studentIdentifier); 
 
                 if (studentInfo) {
-                    studentGmailIDForFilter = studentInfo['StudentGmailID']; // Use StudentGmailID from mapping
+                    studentGmailIDForFilter = studentInfo['StudentGmailID'];
                     console.log(`Student '${studentIdentifier}' found in mapping. Using StudentGmailID: ${studentGmailIDForFilter}`);
                 } else {
-                    // If not found in mapping, assume the identifier *is* the StudentGmailID itself
                     studentGmailIDForFilter = studentIdentifier;
                     console.warn(`Student identifier '${studentIdentifier}' not found in student mapping via Email or CanvasID. Attempting to filter data directly by this identifier as StudentGmailID.`);
                 }
                  
-                // Filter main data feeds by the determined studentGmailIDForFilter
-                const studentAggregatedScores = aggregatedScoresRaw.filter(row => row['StudentGmailID'] === studentGmailIDForFilter); // Filter by StudentGmailID
-                const studentQuestionDetails = questionDetailsRaw.filter(row => row['StudentGmailID'] === studentGmailIDForFilter); // Filter by StudentGmailID
+                const studentAggregatedScores = aggregatedScoresRaw.filter(row => row['StudentGmailID'] === studentGmailIDForFilter);
+                const studentQuestionDetails = questionDetailsRaw.filter(row => row['StudentGmailID'] === studentGmailIDForFilter);
                 
                 console.log(`Filtered data for final StudentGmailID ${studentGmailIDForFilter}:`);
                 console.log("Aggregated scores rows:", studentAggregatedScores.length);
                 console.log("Question details rows:", studentQuestionDetails.length);
 
-                // Initialize currentStudentData with default or derived values
+                // --- CHECK FOR NO DATA AFTER FILTERING ---
+                if (studentAggregatedScores.length === 0 && studentQuestionDetails.length === 0) {
+                     console.warn(`No data found for student Gmail ID ${studentGmailIDForFilter} in aggregated scores or question details. Displaying empty dashboard.`);
+                     document.getElementById('overview-kpis').innerHTML = `<p class="text-gray-600 text-center col-span-5">No data found for student ${window.currentStudentData.name}.</p>`; // Use currentData.name for consistency
+                     window.populateDashboardUI(); // Render empty dashboard
+                     return; // Exit here if no data
+                }
+
+                // Initialize currentStudentData with default or derived values using found studentInfo
                 window.currentStudentData = {
                     name: (studentInfo && studentInfo['StudentName_Canvas']) || (studentAggregatedScores.length > 0 && studentAggregatedScores[0]['StudentFullName']) || `Student ${studentIdentifierForFilter}`,
                     targetScore: (studentInfo && parseInt(studentInfo['StudentTargetScore'])) || 1400,
@@ -357,20 +362,11 @@
                     eocQuizzes: { reading: [], writing: [], math: [] },
                     khanAcademy: { reading: [], writing: [], math: [] },
                     skills: { reading: [], writing: [], math: [] },
-                    chapters: STATIC_CHAPTER_LISTS // Use global STATIC_CHAPTER_LISTS
+                    chapters: STATIC_CHAPTER_LISTS
                 };
 
-                // --- CHECK FOR NO DATA AFTER FILTERING ---
-                if (studentAggregatedScores.length === 0 && studentQuestionDetails.length === 0) {
-                     console.warn(`No data found for student Gmail ID ${studentGmailIDForFilter} in aggregated scores or question details. Displaying empty dashboard.`);
-                     document.getElementById('overview-kpis').innerHTML = `<p class="text-gray-600 text-center col-span-5">No data found for student ${window.currentStudentData.name}.</p>`;
-                     window.populateDashboardUI(); // Render empty dashboard
-                     return; // Exit here if no data
-                }
-
-                // --- Populate currentStudentData.latestScores, scoreTrend, timeSpent from Aggregated Scores ---
                 const latestTest = studentAggregatedScores
-                    .filter(row => row['Assessment Type'] === 'CB Practice Test' && row['ScaledScore_Total'] && row['AttemptDate']) // Use ScaledScore_Total for check
+                    .filter(row => row['Assessment Type'] === 'CB Practice Test' && row['ScaledScore_Total'] && row['AttemptDate'])
                     .sort((a, b) => new Date(b['AttemptDate']) - new Date(a['AttemptDate']))[0];
 
                 if (latestTest) {
@@ -378,10 +374,9 @@
                     window.currentStudentData.latestScores.rw = parseInt(latestTest['ScaledScore_RW']) || 0;
                     window.currentStudentData.latestScores.math = parseInt(latestTest['ScaledScore_Math']) || 0;
                     const avgEocKhanRow = studentAggregatedScores.find(row => row['Assessment Type'] === 'Overall Average');
-                    if (avgEocKhanRow && avgEocKhanRow['Avg EOC/Khan Score']) { // Column name needs to be confirmed
+                    if (avgEocKhanRow && avgEocKhanRow['Avg EOC/Khan Score']) {
                          window.currentStudentData.latestScores.avgEocKhan = parseFloat(avgEocKhanRow['Avg EOC/Khan Score']) || 0;
                     } else {
-                        // Fallback: Calculate from EOC Quizzes if Avg EOC/Khan Score column isn't reliable
                         const allEocScores = Object.values(window.currentStudentData.eocQuizzes).flat().map(q => {
                             const percentageMatch = String(q.latestScore).match(/(\d+)%/);
                             return percentageMatch ? parseInt(percentageMatch[1]) : 0;
@@ -400,20 +395,19 @@
 
                 window.currentStudentData.scoreTrend.labels = scoreTrendData.map(row => row['AssessmentName']);
                 window.currentStudentData.scoreTrend.studentScores = scoreTrendData.map(row => parseInt(row['ScaledScore_Total']) || 0);
-                window.currentStudentData.scoreTrend.classAvgScores = scoreTrendData.map(row => parseInt(row['ClassAverageScore_Normalized']) || 0); // Corrected column name
+                window.currentStudentData.scoreTrend.classAvgScores = scoreTrendData.map(row => parseInt(row['ClassAverageScore_Normalized']) || 0);
 
-                const timeSpentRow = studentAggregatedScores.find(row => row['Assessment Type'] === 'Time Spent'); // Find specific row for time spent
+                const timeSpentRow = studentAggregatedScores.find(row => row['Assessment Type'] === 'Time Spent');
                 if (timeSpentRow) {
-                    window.currentStudentData.timeSpent.studentAvg = parseFloat(timeSpentRow['TimeSpent_Seconds']) / 60 || 0; // Assuming this is total seconds, convert to minutes
-                    window.currentStudentData.timeSpent.classAvg = parseFloat(timeSpentRow['ClassAverageTime_Seconds']) / 60 || 0; // Assuming this is total seconds, convert to minutes
-                    window.currentStudentData.timeSpent.studentUnit = "min / total"; // Clarify unit
-                    window.currentStudentData.timeSpent.classUnit = "min / total"; // Clarify unit
+                    window.currentStudentData.timeSpent.studentAvg = parseFloat(timeSpentRow['TimeSpent_Seconds']) / 60 || 0;
+                    window.currentStudentData.timeSpent.classAvg = parseFloat(timeSpentRow['ClassAverageTime_Seconds']) / 60 || 0;
+                    window.currentStudentData.timeSpent.studentUnit = "min / total";
+                    window.currentStudentData.timeSpent.classUnit = "min / total";
                 } else {
-                    // Fallback if specific time spent row not found
                     window.currentStudentData.timeSpent.studentAvg = Math.round(studentAggregatedScores.reduce((sum, row) => sum + (parseFloat(row.TimeSpent_Seconds) || 0), 0) / (studentAggregatedScores.filter(row => row.TimeSpent_Seconds).length || 1) / 60);
                     window.currentStudentData.timeSpent.classAvg = Math.round(aggregatedScoresRaw.reduce((sum, row) => sum + (parseFloat(row.ClassAverageTime_Seconds) || 0), 0) / (aggregatedScoresRaw.filter(row => row.ClassAverageTime_Seconds).length || 1) / 60);
-                    window.currentStudentData.timeSpent.studentUnit = "min / assessment avg"; // Clarify unit
-                    window.currentStudentData.timeSpent.classUnit = "min / assessment avg"; // Clarify unit
+                    window.currentStudentData.timeSpent.studentUnit = "min / assessment avg";
+                    window.currentStudentData.timeSpent.classUnit = "min / assessment avg";
                 }
 
 
@@ -422,25 +416,26 @@
                 const skillsPerformance = { reading: {}, writing: {}, math: {} };
 
                 studentQuestionDetails.forEach(qRow => {
-                    if (!qRow['Question ID'] || !qRow['Subject'] || !qRow['SAT Skill Tag']) { // Corrected header for Skill Tag
+                    // Log the full row if essential data is missing
+                    if (!qRow['Question ID'] || !qRow['Subject'] || !qRow['SAT Skill Tag']) {
                         console.warn("Skipping question row due to missing essential data:", qRow);
+                        console.log("Problematic row details:", qRow); // THIS LINE WILL LOG THE FULL ROW
                         return;
                     }
 
                     const questionId = qRow['Question ID'];
                     const subject = (qRow['Subject'] || '').toLowerCase();
-                    const skill = qRow['SAT Skill Tag']; // Corrected header
+                    const skill = qRow['SAT Skill Tag'];
                     const difficulty = qRow['Difficulty'] || 'Unknown';
                     const yourAnswer = qRow['Student Answer'] || '';
-                    const correctAnswer = qRow['Correct Answer'] || (qRow.IsCorrect === true ? yourAnswer : ''); // Infer if needed, but 'Correct Answer' column exists
-                    const isCorrect = (qRow.IsCorrect === true); // Use boolean directly
+                    const correctAnswer = qRow['Correct Answer'] || (qRow.IsCorrect === true ? yourAnswer : '');
+                    const isCorrect = (qRow.IsCorrect === true);
                     const explanation = qRow['Explanation'] || 'No explanation available.';
                     const yourTime = parseFloat(qRow['TimeSpentOnQuestion_Seconds']) || 0;
-                    const classAvgTime = parseFloat(qRow['ClassAverageTime_Question_Seconds']) || 0; // Corrected header from ClassAveragePoints_Question
-                    const source = qRow['AssessmentName'] || 'Unknown Source'; // Use AssessmentName as source for question details
+                    const classAvgTime = parseFloat(qRow['ClassAverageTime_Question_Seconds']) || 0; // Corrected from ClassAveragePoints_Question
+                    const source = qRow['AssessmentName'] || 'Unknown Source';
                     const questionText = qRow['QuestionText_fromMetadata'] || `Question ${questionId}`;
 
-                    // Class Performance calculation: these are percentages in CSV, not counts
                     const classCorrect = parseFloat(qRow['Class % Correct']) || 0;
                     const classIncorrect = parseFloat(qRow['Class % Incorrect']) || 0;
                     const classUnanswered = parseFloat(qRow['Class % Unanswered']) || (100 - classCorrect - classIncorrect);
@@ -466,7 +461,7 @@
                     };
                     window.ALL_DASHBOARD_QUESTIONS.push(questionObj);
 
-                    if (qRow['AssessmentSource'] === 'Canvas CB Test' && source) { // Use AssessmentSource
+                    if (qRow['AssessmentSource'] === 'Canvas CB Test' && source) {
                         if (!cbTestsMap.has(source)) {
                             const testAggregate = studentAggregatedScores.find(r => r['AssessmentName'] === source && r['Assessment Type'] === 'CB Practice Test');
                             cbTestsMap.set(source, {
@@ -479,23 +474,23 @@
                             });
                         }
                         cbTestsMap.get(source).questions.push(questionObj);
-                    } else if (qRow['AssessmentSource'] === 'Canvas EOC Practice' && subject && eocQuizzesMap[subject] && source) { // Use AssessmentSource
+                    } else if (qRow['AssessmentSource'] === 'Canvas EOC Practice' && subject && eocQuizzesMap[subject] && source) {
                         if (!eocQuizzesMap[subject].has(source)) {
                             eocQuizzesMap[subject].set(source, {
                                 name: source,
-                                date: qRow['AttemptDate'] || "N/A", // Assuming date from question row for EOCs
+                                date: qRow['AttemptDate'] || "N/A",
                                 latestScore: `${classCorrect}%`,
                                 questions: []
                             });
                         }
                         eocQuizzesMap[subject].get(source).questions.push(questionObj);
                     } else if (qRow['AssessmentSource'] === 'Khan Academy Practice' && subject && window.currentStudentData.khanAcademy[subject] && source) {
-                         if (!window.currentStudentData.khanAcademy[subject].some(k => k.name === source)) { // Avoid duplicates
+                         if (!window.currentStudentData.khanAcademy[subject].some(k => k.name === source)) {
                             window.currentStudentData.khanAcademy[subject].push({
                                 name: source,
                                 date: qRow['AttemptDate'] || "N/A",
-                                latestScore: `${classCorrect}%`, // Placeholder, need actual Khan score
-                                questions: [] // Could populate if Khan questions are truly needed, but not common
+                                latestScore: `${classCorrect}%`,
+                                questions: []
                             });
                          }
                     }
@@ -505,8 +500,8 @@
                             skillsPerformance[subject][skill] = {
                                 correctCount: 0,
                                 totalCount: 0,
-                                classCorrectSum: 0, // Sum of class correct percentages for average
-                                classTotalCount: 0 // Count of questions to average class performance
+                                classCorrectSum: 0,
+                                classTotalCount: 0
                             };
                         }
                         skillsPerformance[subject][skill].totalCount++;
@@ -521,7 +516,7 @@
                 window.currentStudentData.cbPracticeTests = Array.from(cbTestsMap.values());
                 const allCBTestNames = [
                     "DG-T0", "CB-T1", "CB-T2", "CB-T3", "CB-T4", "CB-T5", "CB-T6", "CB-T7", "CB-T8", "CB-T9", "CB-T10"
-                ]; // These are the AssessmentNames from AggregatedScores and QuestionDetails
+                ];
                 allCBTestNames.forEach(testName => {
                     if (!window.currentStudentData.cbPracticeTests.some(test => test.name === testName)) {
                         const testAggregate = studentAggregatedScores.find(r => r['AssessmentName'] === testName && r['Assessment Type'] === 'CB Practice Test');
@@ -699,7 +694,7 @@
 
             try {
                 // Prompt for email ID on refresh
-                let studentEmail = prompt("Please enter your student email ID to refresh data (e.g., aisha@example.com):");
+                let studentEmail = prompt("Please enter your student email ID to refresh data (e.g., aisha.m@example.com):");
                 if (!studentEmail) {
                     alert("Refresh cancelled. No email provided.");
                     return;
@@ -1243,7 +1238,7 @@
             
             // Initial load for a confirmed StudentGmailID from your data.
             // This student ('aisha@example.com') has data in the main feeds.
-            const studentGmailIdForInitialLoad = "aisha@example.com"; 
+            const studentGmailIdForInitialLoad = "aisha.m@example.com"; 
             console.log(`Initial dashboard load for student: ${studentGmailIdForInitialLoad}`);
             window.loadAndProcessData(studentGmailIdForInitialLoad);
         };
