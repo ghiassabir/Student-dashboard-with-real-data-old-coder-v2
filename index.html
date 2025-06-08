@@ -137,8 +137,6 @@
         const STUDENT_MAPPING_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=0&single=true&output=csv'; // Student_Mapping from Phase 2
 
         // --- GLOBAL DATA STORAGE ---
-        // Declare these using 'let' or 'const' ONCE at the very top level of this inline script
-        // and attach functions to `window` for global access.
         let currentStudentData = {};
         let ALL_DASHBOARD_QUESTIONS = [];
 
@@ -312,57 +310,38 @@
             if (!skillTag) return 'unknown';
             const normalizedTag = skillTag.toLowerCase();
 
-            // Broad keywords to determine subject from SAT_Skill_Tag
-            if (normalizedTag.includes("math") ||
-                normalizedTag.includes("algebra") ||
-                normalizedTag.includes("geometry") ||
-                normalizedTag.includes("exponents") ||
-                normalizedTag.includes("percent") ||
-                normalizedTag.includes("rates") ||
-                normalizedTag.includes("ratio") ||
-                normalizedTag.includes("equations") ||
-                normalizedTag.includes("functions") ||
-                normalizedTag.includes("quadratics") ||
-                normalizedTag.includes("statistics") ||
-                normalizedTag.includes("trigonometry") ||
-                normalizedTag.includes("volume") ||
-                normalizedTag.includes("complex numbers") ||
-                normalizedTag.includes("data analysis") ||
-                normalizedTag.includes("word problems")) { // Added word problems
-                return 'math';
+            // Math related keywords in SAT_Skill_Tag
+            const mathKeywords = [
+                "math", "algebra", "geometry", "exponents", "percent", "rates",
+                "ratio", "equations", "functions", "quadratics", "statistics",
+                "trigonometry", "volume", "numbers", "data analysis", "word problems",
+                "linear", "nonlinear", "graphs", "tables", "circles", "triangles", "angles"
+            ];
+            for (const keyword of mathKeywords) {
+                if (normalizedTag.includes(keyword)) return 'math';
             }
-            if (normalizedTag.includes("writing") ||
-                normalizedTag.includes("grammar") ||
-                normalizedTag.includes("punctuation") ||
-                normalizedTag.includes("sentence structure") ||
-                normalizedTag.includes("transitions") ||
-                normalizedTag.includes("verbs") ||
-                normalizedTag.includes("pronoun") ||
-                normalizedTag.includes("apostrophes") ||
-                normalizedTag.includes("modification") ||
-                normalizedTag.includes("parallel structure") ||
-                normalizedTag.includes("word pairs") ||
-                normalizedTag.includes("question marks") ||
-                normalizedTag.includes("effective language") || // From your logs
-                normalizedTag.includes("organization")) { // From your logs
-                return 'writing';
+
+            // Writing related keywords in SAT_Skill_Tag
+            const writingKeywords = [
+                "writing", "grammar", "punctuation", "sentence structure", "transitions",
+                "verbs", "pronoun", "apostrophes", "modification", "parallel structure",
+                "word pairs", "question marks", "effective language", "organization", "diction", "synthesis"
+            ];
+            for (const keyword of writingKeywords) {
+                if (normalizedTag.includes(keyword)) return 'writing';
             }
-            if (normalizedTag.includes("reading") ||
-                normalizedTag.includes("vocabulary in context") ||
-                normalizedTag.includes("central ideas") ||
-                normalizedTag.includes("inference") ||
-                normalizedTag.includes("literal comprehension") ||
-                normalizedTag.includes("text structure") ||
-                normalizedTag.includes("purpose") ||
-                normalizedTag.includes("text completions") ||
-                normalizedTag.includes("command of evidence") ||
-                normalizedTag.includes("graphs") ||
-                normalizedTag.includes("charts") ||
-                normalizedTag.includes("paired passages") ||
-                normalizedTag.includes("analyzing multiple texts") || // From your logs
-                normalizedTag.includes("figurative language")) { // From your logs
-                return 'reading';
+
+            // Reading related keywords in SAT_Skill_Tag
+            const readingKeywords = [
+                "reading", "vocabulary in context", "central ideas", "inference", "literal comprehension",
+                "text structure", "purpose", "text completions", "command of evidence", "graphs",
+                "charts", "paired passages", "analyzing multiple texts", "figurative language",
+                "main idea", "evidence", "rhetoric", "synthesis"
+            ];
+            for (const keyword of readingKeywords) {
+                if (normalizedTag.includes(keyword)) return 'reading';
             }
+
             return 'unknown';
         }
 
@@ -402,6 +381,28 @@
                 console.log("Aggregated scores rows:", studentAggregatedScores.length);
                 console.log("Question details rows:", studentQuestionDetails.length);
 
+                // --- CHECK FOR NO DATA AFTER FILTERING ---
+                if (studentAggregatedScores.length === 0 && studentQuestionDetails.length === 0) {
+                     console.warn(`No data found for student Gmail ID ${studentGmailIDForFilter} in aggregated scores or question details. Displaying empty dashboard.`);
+                     // Initialize with empty but valid structure for currentStudentData
+                     window.currentStudentData = {
+                        name: (studentInfo && studentInfo['StudentName_Canvas']) || `Student ${studentIdentifierForFilter}`,
+                        targetScore: (studentInfo && parseInt(studentInfo['StudentTargetScore'])) || 1400,
+                        latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 0 },
+                        timeSpent: { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"},
+                        scoreTrend: { labels: [], studentScores: [], classAvgScores: [] },
+                        overallSkillPerformance: { labels: ['Reading', 'Writing', 'Math'], studentAccuracy: [0, 0, 0], classAvgAccuracy: [0, 0, 0] },
+                        cbPracticeTests: [],
+                        eocQuizzes: { reading: [], writing: [], math: [] },
+                        khanAcademy: { reading: [], writing: [], math: [] },
+                        skills: { reading: [], writing: [], math: [] },
+                        chapters: STATIC_CHAPTER_LISTS
+                    };
+                     document.getElementById('overview-kpis').innerHTML = `<p class="text-gray-600 text-center col-span-5">No data found for student ${window.currentStudentData.name}.</p>`;
+                     window.populateDashboardUI(); // Render empty dashboard
+                     return; // Exit here if no data
+                }
+
                 // Initialize currentStudentData with default or derived values using found studentInfo
                 window.currentStudentData = {
                     name: (studentInfo && studentInfo['StudentName_Canvas']) || (studentAggregatedScores.length > 0 && studentAggregatedScores[0]['StudentFullName']) || `Student ${studentIdentifierForFilter}`,
@@ -417,15 +418,6 @@
                     chapters: STATIC_CHAPTER_LISTS // Use global STATIC_CHAPTER_LISTS
                 };
 
-                // --- CHECK FOR NO DATA AFTER FILTERING ---
-                if (studentAggregatedScores.length === 0 && studentQuestionDetails.length === 0) {
-                     console.warn(`No data found for student Gmail ID ${studentGmailIDForFilter} in aggregated scores or question details. Displaying empty dashboard.`);
-                     document.getElementById('overview-kpis').innerHTML = `<p class="text-gray-600 text-center col-span-5">No data found for student ${window.currentStudentData.name}.</p>`;
-                     window.populateDashboardUI(); // Render empty dashboard
-                     return; // Exit here if no data
-                }
-
-                // --- Populate currentStudentData.latestScores, scoreTrend, timeSpent from Aggregated Scores ---
                 const latestTest = studentAggregatedScores
                     .filter(row => row['Assessment Type'] === 'CB Practice Test' && row['ScaledScore_Total'] && row['AttemptDate'])
                     .sort((a, b) => new Date(b['AttemptDate']) - new Date(a['AttemptDate']))[0];
@@ -478,21 +470,21 @@
 
                 studentQuestionDetails.forEach(qRow => {
                     // Robustly derive essential data, using fallbacks if needed
-                    const questionId = (qRow['Question ID'] && String(qRow['Question ID'])) || `${qRow['AssessmentName']}-${qRow['QuestionSequenceInQuiz']}`; // Construct ID if missing or null
-                    const rawSkillTag = qRow['SAT Skill Tag']; // Get the SAT Skill Tag
-                    const subject = window.getSubjectFromSkillTag(rawSkillTag); // Use the new robust function
+                    const questionId = (qRow['Question ID'] && String(qRow['Question ID'])) || `${qRow['AssessmentName']}-${qRow['QuestionSequenceInQuiz']}`;
+                    const rawSkillTag = qRow['SAT Skill Tag'];
+                    const subject = window.getSubjectFromSkillTag(rawSkillTag);
                     const skill = rawSkillTag || 'Unknown Skill';
                     
                     // Skip row ONLY if core identifying data (questionId, subject, or skill) cannot be determined
                     if (!questionId || subject === 'unknown' || skill === 'Unknown Skill') {
                          console.warn("Skipping question row due to unidentifiable essential data:", qRow);
-                         return; // Skip if basic info is unrecoverable
+                         return;
                     }
 
                     const difficulty = qRow['Difficulty'] || 'Unknown';
                     const yourAnswer = String(qRow['Student Answer']) || 'N/A';
                     const correctAnswer = String(qRow['Correct Answer']) || (qRow.IsCorrect === true ? yourAnswer : 'N/A');
-                    const isCorrect = (qRow.IsCorrect === true); // Ensure boolean (PapaParse dynamicTyping helps here)
+                    const isCorrect = (qRow.IsCorrect === true);
                     const explanation = qRow['Explanation'] || 'No explanation available.';
                     const yourTime = parseFloat(qRow['TimeSpentOnQuestion_Seconds']) || 0;
                     const classAvgTime = parseFloat(qRow['ClassAverageTime_Question_Seconds']) || 0;
