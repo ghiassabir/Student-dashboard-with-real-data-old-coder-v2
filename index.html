@@ -308,9 +308,10 @@
         // Helper to determine subject from skill tag
         window.getSubjectFromSkillTag = function(skillTag) {
             if (!skillTag) return 'unknown';
-            const normalizedTag = skillTag.toLowerCase();
+            const normalizedTag = skillTag.toLowerCase().trim();
 
-            // Keywords for Math subjects (expanded for better coverage)
+            // Broad keywords for classification. Order matters: more specific first.
+            // Math
             const mathKeywords = [
                 "math", "algebra", "geometry", "exponents", "percent", "rates",
                 "ratio", "equations", "functions", "quadratics", "statistics",
@@ -322,23 +323,23 @@
                 if (normalizedTag.includes(keyword)) return 'math';
             }
 
-            // Keywords for Writing subjects (expanded for better coverage)
+            // Writing
             const writingKeywords = [
                 "writing", "grammar", "punctuation", "sentence structure", "transitions",
                 "verbs", "pronoun", "apostrophes", "modification", "parallel structure",
                 "word pairs", "question marks", "effective language", "organization",
-                "diction", "synthesis", "rhetorical", "fragments", "run-on", "conventions"
+                "diction", "synthesis", "rhetorical", "fragments", "run-on", "conventions", "development of ideas"
             ];
             for (const keyword of writingKeywords) {
                 if (normalizedTag.includes(keyword)) return 'writing';
             }
 
-            // Keywords for Reading subjects (expanded for better coverage)
+            // Reading
             const readingKeywords = [
                 "reading", "vocabulary in context", "central ideas", "inference", "literal comprehension",
                 "text structure", "purpose", "text completions", "command of evidence", "graphs",
                 "charts", "paired passages", "analyzing multiple texts", "figurative language",
-                "main idea", "evidence", "rhetoric", "summaries", "information and ideas", "craft and structure"
+                "main idea", "evidence", "rhetoric", "summaries", "information and ideas", "craft and structure", "cross-text"
             ];
             for (const keyword of readingKeywords) {
                 if (normalizedTag.includes(keyword)) return 'reading';
@@ -346,6 +347,7 @@
 
             return 'unknown';
         }
+
 
         // --- MAIN DATA LOADING AND TRANSFORMATION ---
         window.loadAndProcessData = async function(studentIdentifier) {
@@ -382,28 +384,6 @@
                 console.log("Aggregated scores rows:", studentAggregatedScores.length);
                 console.log("Question details rows:", studentQuestionDetails.length);
 
-                // --- CHECK FOR NO DATA AFTER FILTERING ---
-                if (studentAggregatedScores.length === 0 && studentQuestionDetails.length === 0) {
-                     console.warn(`No data found for student Gmail ID ${studentGmailIDForFilter} in aggregated scores or question details. Displaying empty dashboard.`);
-                     // Initialize with empty but valid structure for currentStudentData
-                     window.currentStudentData = {
-                        name: (studentInfo && studentInfo['StudentName_Canvas']) || `Student ${studentIdentifierForFilter}`,
-                        targetScore: (studentInfo && parseInt(studentInfo['StudentTargetScore'])) || 1400,
-                        latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 0 },
-                        timeSpent: { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"},
-                        scoreTrend: { labels: [], studentScores: [], classAvgScores: [] },
-                        overallSkillPerformance: { labels: ['Reading', 'Writing', 'Math'], studentAccuracy: [0, 0, 0], classAvgAccuracy: [0, 0, 0] },
-                        cbPracticeTests: [],
-                        eocQuizzes: { reading: [], writing: [], math: [] },
-                        khanAcademy: { reading: [], writing: [], math: [] },
-                        skills: { reading: [], writing: [], math: [] },
-                        chapters: STATIC_CHAPTER_LISTS
-                    };
-                     document.getElementById('overview-kpis').innerHTML = `<p class="text-gray-600 text-center col-span-5">No data found for student ${window.currentStudentData.name}.</p>`;
-                     window.populateDashboardUI(); // Render empty dashboard
-                     return; // Exit here if no data
-                }
-
                 // Initialize currentStudentData with default or derived values using found studentInfo
                 window.currentStudentData = {
                     name: (studentInfo && studentInfo['StudentName_Canvas']) || (studentAggregatedScores.length > 0 && studentAggregatedScores[0]['StudentFullName']) || `Student ${studentIdentifierForFilter}`,
@@ -419,6 +399,15 @@
                     chapters: STATIC_CHAPTER_LISTS // Use global STATIC_CHAPTER_LISTS
                 };
 
+                // --- CHECK FOR NO DATA AFTER FILTERING ---
+                if (studentAggregatedScores.length === 0 && studentQuestionDetails.length === 0) {
+                     console.warn(`No data found for student Gmail ID ${studentGmailIDForFilter} in aggregated scores or question details. Displaying empty dashboard.`);
+                     document.getElementById('overview-kpis').innerHTML = `<p class="text-gray-600 text-center col-span-5">No data found for student ${window.currentStudentData.name}.</p>`;
+                     window.populateDashboardUI(); // Render empty dashboard
+                     return; // Exit here if no data
+                }
+
+                // --- Populate currentStudentData.latestScores, scoreTrend, timeSpent from Aggregated Scores ---
                 const latestTest = studentAggregatedScores
                     .filter(row => row['Assessment Type'] === 'CB Practice Test' && row['ScaledScore_Total'] && row['AttemptDate'])
                     .sort((a, b) => new Date(b['AttemptDate']) - new Date(a['AttemptDate']))[0];
@@ -476,12 +465,11 @@
                     const subject = window.getSubjectFromSkillTag(rawSkillTag); // Use the new robust function
                     const skill = rawSkillTag || 'Unknown Skill';
                     
-                    // TEMPORARILY REMOVED THE STRICT CHECK FOR DEBUGGING
-                    // This will allow all 88 questions to be processed.
-                    // The console.warn is kept to still flag problematic rows.
-                    // Removed the return statement to allow all rows to be processed for now.
+                    // The explicit `if` check that caused skipping is removed.
+                    // Questions will now be processed even if their subject/skill is 'unknown'.
+                    // Log the warning if it's problematic, but don't `return`.
                     if (!questionId || subject === 'unknown' || skill === 'Unknown Skill') {
-                         console.warn("Processing row with potentially unidentifiable essential data (will attempt to use it):", qRow, "Derived Subject:", subject, "Derived Skill:", skill);
+                         console.warn("Processing row with potentially unidentifiable essential data (derived as 'unknown' or empty). Row details:", qRow, "Derived Subject:", subject, "Derived Skill:", skill);
                     }
 
                     const difficulty = qRow['Difficulty'] || 'Unknown';
@@ -555,7 +543,8 @@
                          }
                     }
 
-                    if (skill && subject && ['reading', 'writing', 'math'].includes(subject)) {
+                    // Aggregate skills data only if subject is known (reading, writing, math)
+                    if (skill && ['reading', 'writing', 'math'].includes(subject)) {
                         if (!skillsPerformance[subject][skill]) {
                             skillsPerformance[subject][skill] = {
                                 correctCount: 0,
@@ -620,13 +609,13 @@
                     if (subjectSkills.length > 0) {
                         const totalStudentAccuracy = subjectSkills.reduce((sum, s) => sum + s.score, 0);
                         const totalClassAccuracy = subjectSkills.reduce((sum, s) => sum + s.classAvg, 0);
-                        currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
-                        currentStudentData.overallSkillPerformance.studentAccuracy[index] = Math.round(totalStudentAccuracy / subjectSkills.length);
-                        currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = Math.round(totalClassAccuracy / subjectSkills.length);
+                        window.currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
+                        window.currentStudentData.overallSkillPerformance.studentAccuracy[index] = Math.round(totalStudentAccuracy / subjectSkills.length);
+                        window.currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = Math.round(totalClassAccuracy / subjectSkills.length);
                     } else {
-                         currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
-                         currentStudentData.overallSkillPerformance.studentAccuracy[index] = 0;
-                         currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = 0;
+                         window.currentStudentData.overallSkillPerformance.labels[index] = (sub.charAt(0).toUpperCase() + sub.slice(1));
+                         window.currentStudentData.overallSkillPerformance.studentAccuracy[index] = 0;
+                         window.currentStudentData.overallSkillPerformance.classAvgAccuracy[index] = 0;
                     }
                 });
 
