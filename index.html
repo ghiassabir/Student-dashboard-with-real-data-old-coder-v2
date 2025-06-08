@@ -220,7 +220,7 @@
                 "Analyzing how specific words, phrases, sentences, or paragraphs contribute to the author's overall purpose, argument, or the structure of the text": ["6: Reading for Function"],
                 "Choosing words/phrases that best complete the meaning/logic of a portion of text": ["7: Text Completions"],
                 "Identifying textual evidence that best supports a given claim or identifying claims/evidence that would undermine an argument": ["8: Supporting & Undermining"],
-                "Interpreting data presented in tables, graphs, and charts, and integrating that information with textual information": ["9: Graphs & Charts"],
+                "Interpreting data presented in tables, graphs, and charts, and integrating that information with الخلاصة": ["9: Graphs & Charts"],
                 "Analyzing the relationship between two related texts, including identifying points of agreement/disagreement, or how one text responds to/elabo rates on the other": ["10: Paired Passages"],
                 "Reviewing various question formats and strategies for approaching them": ["Appendix: Question Types"]
             }
@@ -310,33 +310,35 @@
             if (!skillTag) return 'unknown';
             const normalizedTag = skillTag.toLowerCase();
 
-            // Math related keywords in SAT_Skill_Tag
+            // Keywords for Math subjects (expanded for better coverage)
             const mathKeywords = [
                 "math", "algebra", "geometry", "exponents", "percent", "rates",
                 "ratio", "equations", "functions", "quadratics", "statistics",
                 "trigonometry", "volume", "numbers", "data analysis", "word problems",
-                "linear", "nonlinear", "graphs", "tables", "circles", "triangles", "angles"
+                "linear", "nonlinear", "graphs", "tables", "circles", "triangles", "angles",
+                "probability", "complex numbers", "absolute value", "measurement", "data interpretation"
             ];
             for (const keyword of mathKeywords) {
                 if (normalizedTag.includes(keyword)) return 'math';
             }
 
-            // Writing related keywords in SAT_Skill_Tag
+            // Keywords for Writing subjects (expanded for better coverage)
             const writingKeywords = [
                 "writing", "grammar", "punctuation", "sentence structure", "transitions",
                 "verbs", "pronoun", "apostrophes", "modification", "parallel structure",
-                "word pairs", "question marks", "effective language", "organization", "diction", "synthesis"
+                "word pairs", "question marks", "effective language", "organization",
+                "diction", "synthesis", "rhetorical", "fragments", "run-on", "conventions"
             ];
             for (const keyword of writingKeywords) {
                 if (normalizedTag.includes(keyword)) return 'writing';
             }
 
-            // Reading related keywords in SAT_Skill_Tag
+            // Keywords for Reading subjects (expanded for better coverage)
             const readingKeywords = [
                 "reading", "vocabulary in context", "central ideas", "inference", "literal comprehension",
                 "text structure", "purpose", "text completions", "command of evidence", "graphs",
                 "charts", "paired passages", "analyzing multiple texts", "figurative language",
-                "main idea", "evidence", "rhetoric", "synthesis"
+                "main idea", "evidence", "rhetoric", "summaries", "information and ideas", "craft and structure"
             ];
             for (const keyword of readingKeywords) {
                 if (normalizedTag.includes(keyword)) return 'reading';
@@ -471,14 +473,14 @@
                 studentQuestionDetails.forEach(qRow => {
                     // Robustly derive essential data, using fallbacks if needed
                     const questionId = (qRow['Question ID'] && String(qRow['Question ID'])) || `${qRow['AssessmentName']}-${qRow['QuestionSequenceInQuiz']}`;
-                    const rawSkillTag = qRow['SAT Skill Tag'];
-                    const subject = window.getSubjectFromSkillTag(rawSkillTag);
+                    const rawSkillTag = qRow['SAT Skill Tag']; // Get the SAT Skill Tag
+                    const subject = window.getSubjectFromSkillTag(rawSkillTag); // Use the new robust function
                     const skill = rawSkillTag || 'Unknown Skill';
                     
                     // Skip row ONLY if core identifying data (questionId, subject, or skill) cannot be determined
                     if (!questionId || subject === 'unknown' || skill === 'Unknown Skill') {
                          console.warn("Skipping question row due to unidentifiable essential data:", qRow);
-                         return;
+                         return; // Skip if basic info is unrecoverable
                     }
 
                     const difficulty = qRow['Difficulty'] || 'Unknown';
