@@ -220,7 +220,7 @@
                 "Analyzing how specific words, phrases, sentences, or paragraphs contribute to the author's overall purpose, argument, or the structure of the text": ["6: Reading for Function"],
                 "Choosing words/phrases that best complete the meaning/logic of a portion of text": ["7: Text Completions"],
                 "Identifying textual evidence that best supports a given claim or identifying claims/evidence that would undermine an argument": ["8: Supporting & Undermining"],
-                "Interpreting data presented in tables, charts, and graphs, and integrating that information with الخلاصة": ["9: Graphs & Charts"],
+                "Interpreting data presented in tables, graphs, and charts, and integrating that information with الخلاصة": ["9: Graphs & Charts"],
                 "Analyzing the relationship between two related texts, including identifying points of agreement/disagreement, or how one text responds to/elabo rates on the other": ["10: Paired Passages"],
                 "Reviewing various question formats and strategies for approaching them": ["Appendix: Question Types"]
             }
@@ -472,17 +472,16 @@
                 studentQuestionDetails.forEach(qRow => {
                     // Robustly derive essential data, using fallbacks if needed
                     const questionId = (qRow['Question ID'] && String(qRow['Question ID'])) || `${qRow['AssessmentName']}-${qRow['QuestionSequenceInQuiz']}`;
-                    const rawSkillTag = qRow['SAT Skill Tag'];
+                    const rawSkillTag = qRow['SAT Skill Tag']; // Get the SAT Skill Tag
                     const subject = window.getSubjectFromSkillTag(rawSkillTag); // Use the new robust function
                     const skill = rawSkillTag || 'Unknown Skill';
                     
                     // TEMPORARILY REMOVED THE STRICT CHECK FOR DEBUGGING
                     // This will allow all 88 questions to be processed.
                     // The console.warn is kept to still flag problematic rows.
+                    // Removed the return statement to allow all rows to be processed for now.
                     if (!questionId || subject === 'unknown' || skill === 'Unknown Skill') {
                          console.warn("Processing row with potentially unidentifiable essential data (will attempt to use it):", qRow, "Derived Subject:", subject, "Derived Skill:", skill);
-                         // If we decide to keep this row, we need a fallback for the UI to handle 'unknown' gracefully.
-                         // For now, we'll let it pass and see what shows up.
                     }
 
                     const difficulty = qRow['Difficulty'] || 'Unknown';
@@ -763,4 +762,546 @@
                 localStorage.setItem('dashboardStudentEmail', studentEmail); // Save for next time
                 await window.loadAndProcessData(studentEmail); // Pass the email directly for filtering
                 alert("Dashboard data refreshed successfully!");
-            } <output truncated>
+            } catch (error) {
+                alert("Failed to refresh dashboard data. Check console for errors.");
+            } finally {
+                document.getElementById('refreshDataBtn').textContent = originalRefreshText;
+                document.getElementById('refreshDataBtn').disabled = false;
+            }
+        }
+
+        window.populateOverview = function(data) { // Attached to window
+            const kpiContainer = document.getElementById('overview-kpis');
+            if (!kpiContainer) { console.error("Overview KPIs container not found."); return; }
+
+            kpiContainer.innerHTML = `
+                <div class="score-card"><h3 class="text-md font-medium text-gray-600">Latest Total Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.total} <span class="text-lg text-gray-500">/ 1600</span></p></div>
+                <div class="score-card"><h3 class="text-md font-medium text-gray-600">Latest R&W Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.rw} <span class="text-lg text-gray-500">/ 800</span></p></div>
+                <div class="score-card"><h3 class="text-md font-medium text-gray-600">Latest Math Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.math} <span class="text-lg text-gray-500">/ 800</span></p></div>
+                <div class="score-card"><h3 class="text-md font-medium text-gray-600">Avg EOC Score</h3><p class="text-3xl font-bold score-value">${data.latestScores.avgEocKhan}%</p></div>
+                <div class="score-card"><h3 class="text-md font-medium text-gray-600">Your Target Score</h3><p class="text-3xl font-bold" style="color: #8a3ffc;">${data.targetScore}</p></div>`;
+
+            const allSkills = Object.values(data.skills).flat().filter(s => s.attempted);
+            const strengths = [...allSkills].sort((a, b) => b.score - a.score).slice(0, 3);
+            const weaknesses = [...allSkills].sort((a, b) => a.score - b.score).slice(0, 3);
+
+            const renderList = (items) => items.map(item => `<li>${item.name} (${item.score}%)</li>`).join('');
+            document.getElementById('overviewStrengthsContainer').innerHTML = `<ul class="list-disc list-inside space-y-1 text-gray-600">${renderList(strengths)}</ul>`;
+            document.getElementById('overviewImprovementsContainer').innerHTML = `<ul class="list-disc list-inside space-y-1 text-gray-600">${renderList(weaknesses)}</ul>`;
+
+            document.getElementById('timeSpentOverview').innerHTML = `<p class="text-gray-600">Your Avg: <span class="font-semibold">${data.timeSpent.studentAvg} ${data.timeSpent.studentUnit}</span></p><p class="text-gray-600">Class Avg: <span class="font-semibold">${data.timeSpent.classAvg} ${data.timeSpent.classUnit}</span></p>`;
+        }
+
+        window.initializeOverviewCharts = function(data) { // Attached to window
+            const scoreTrendChartCanvas = document.getElementById('scoreTrendChart');
+            if (!scoreTrendChartCanvas) {
+                console.warn("Score Trend Chart canvas not found. Cannot initialize chart.");
+                const parentDiv = document.querySelector('.themed-card.chart-container .themed-card-body');
+                if (parentDiv && !parentDiv.querySelector('canvas')) {
+                    parentDiv.innerHTML = '<p class="text-center p-4 text-gray-500">No score trend data available.</p>';
+                }
+                return;
+            }
+
+            const existingScoreTrendChart = Chart.getChart('scoreTrendChart');
+            if (existingScoreTrendChart) {
+                existingScoreTrendChart.destroy();
+            }
+
+            if (data.scoreTrend && data.scoreTrend.labels.length > 0) {
+                scoreTrendChartCanvas.style.display = 'block';
+                new Chart(scoreTrendChartCanvas, {
+                    type: 'line',
+                    data: {
+                        labels: data.scoreTrend.labels,
+                        datasets: [
+                            { label: 'Your Score', data: data.scoreTrend.studentScores, borderColor: '#2a5266', tension: 0.1 },
+                            { label: 'Class Average', data: data.scoreTrend.classAvgScores, borderColor: '#757575', borderDash: [5, 5], tension: 0.1 }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
+                            tooltip: { mode: 'index', intersect: false }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                suggestedMin: (Math.min(...data.scoreTrend.studentScores.filter(s => s > 0), ...data.scoreTrend.classAvgScores.filter(s => s > 0)) > 0 ? Math.min(...data.scoreTrend.studentScores.filter(s => s > 0), ...data.scoreTrend.classAvgScores.filter(s => s > 0)) : 1000) - 50,
+                                suggestedMax: (Math.max(...data.scoreTrend.studentScores.filter(s => s > 0), ...data.scoreTrend.classAvgScores.filter(s => s > 0)) > 0 ? Math.max(...data.scoreTrend.studentScores.filter(s => s > 0), ...data.scoreTrend.classAvgScores.filter(s => s > 0)) : 1200) + 50,
+                                title: { display: true, text: 'Score' }
+                            },
+                            x: { title: { display: true, text: 'Assessment' } }
+                        }
+                    }
+                });
+            } else {
+                scoreTrendChartCanvas.style.display = 'none';
+                const existingNoData = document.getElementById('scoreTrendChartNoData');
+                if (!existingNoData) scoreTrendChartCanvas.parentNode.innerHTML += '<p class="text-center p-4 text-gray-500" id="scoreTrendChartNoData">No score trend data available.</p>';
+            }
+
+            const overallSkillChartCanvas = document.getElementById('overallSkillChart');
+            if (!overallSkillChartCanvas) {
+                console.warn("Overall Skill Chart canvas not found. Cannot initialize chart.");
+                const parentDiv = document.querySelector('.themed-card.chart-container:nth-of-type(2) .themed-card-body');
+                if (parentDiv && !parentDiv.querySelector('canvas')) {
+                    parentDiv.innerHTML = '<p class="text-center p-4 text-gray-500">No overall skill performance data available.</p>';
+                }
+                return;
+            }
+
+            const existingOverallSkillChart = Chart.getChart('overallSkillChart');
+            if (existingOverallSkillChart) {
+                existingOverallSkillChart.destroy();
+            }
+
+            if (data.overallSkillPerformance && data.overallSkillPerformance.labels.length > 0) {
+                overallSkillChartCanvas.style.display = 'block';
+                new Chart(overallSkillChartCanvas, {
+                    type: 'bar',
+                    data: {
+                        labels: data.overallSkillPerformance.labels,
+                        datasets: [
+                            { label: 'Your Accuracy', data: data.overallSkillPerformance.studentAccuracy, backgroundColor: 'rgba(42, 82, 102, 0.8)' },
+                            { label: 'Class Average', data: data.overallSkillPerformance.classAvgAccuracy, backgroundColor: 'rgba(117, 117, 117, 0.7)' }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 10 } } },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false,
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) { label += ': '; }
+                                        if (context.parsed.y !== null) { label += context.parsed.y + '%'; }
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: { beginAtZero: true, max: 100, title: { display: true, text: 'Accuracy (%)' } },
+                            x: { title: { display: true, text: 'Subject' } }
+                        }
+                    }
+                });
+            } else {
+                overallSkillChartCanvas.style.display = 'none';
+                const existingNoData = document.getElementById('overallSkillChartNoData');
+                if (!existingNoData) overallSkillChartCanvas.parentNode.innerHTML += '<p class="text-center p-4 text-gray-500" id="overallSkillChartNoData">No overall skill performance data available.</p>';
+            }
+        }
+
+        window.populateSkillsHub = function(subject, skills) { // Attached to window
+            const container = document.getElementById(`${subject}-skills-hub-body`);
+            if (!container) return;
+
+            skills.sort((a, b) => a.score - b.score);
+
+            if (skills.length === 0) {
+                container.innerHTML = `<p class="text-center p-4 text-gray-500">No skill data available for ${subject}.</p>`;
+                return;
+            }
+
+            container.innerHTML = skills.map(skill => {
+                const performanceClass = skill.attempted ? (skill.score >= 85 ? 'performance-good' : skill.score >= 70 ? 'performance-average' : 'performance-poor') : 'performance-na';
+                return `
+                <div class="p-3 bg-gray-50 rounded-md border border-gray-200 mb-2 skill-item-container" onclick="window.openSkillIncorrectQuestionsModal('${skill.name}', '${subject}')">
+                    <div class="flex justify-between items-center mb-1">
+                        <span class="text-sm font-medium text-gray-800">${skill.name}</span>
+                        <span class="text-xs font-semibold">${skill.attempted ? skill.score + '%' : 'N/A'}</span>
+                    </div>
+                    <div class="progress-bar-container"><div class="progress-bar ${performanceClass}" style="width: ${skill.attempted ? skill.score : 0}%"></div></div>
+                    <p class="text-xs text-gray-500 mt-1">Class Avg: ${skill.classAvg}%</p>
+                </div>`;
+            }).join('');
+        }
+
+
+        window.populatePracticeTestsTable = function(tests) { // Attached to window
+            const tableBody = document.getElementById('cb-practice-tests-table-body');
+            if (!tableBody) return;
+
+            if (tests.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="5" class="text-center text-gray-500">No CB practice test data available.</td></tr>`;
+                return;
+            }
+
+            tableBody.innerHTML = tests.map(test => {
+                const isAttempted = test.date && test.date !== "Not Attempted" && test.date !== "-";
+                return `
+                <tr class="${isAttempted ? 'clickable-row' : 'opacity-60'}" ${isAttempted ? `onclick="window.openTestQuestionsModal('${test.name}')"` : ''}>
+                    <td>${test.name}</td>
+                    <td>${window.formatDate(test.date)}</td>
+                    <td>${test.rw}</td>
+                    <td>${test.math}</td>
+                    <td>${test.total}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        window.populateEOCPractice = function(subject, quizzes) { // Attached to window
+            const tableBody = document.getElementById(`${subject}-eoc-tbody`);
+            if (!tableBody) return;
+
+            const eocThead = document.getElementById(`${subject}-eoc-thead`);
+            if (eocThead) {
+                const headers = ['Quiz Name', 'Date Attempted', 'Latest Score'];
+                eocThead.innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join('')}</tr>`;
+            } else if (eocThead) {
+                eocThead.innerHTML = `<tr><th>Quiz Name</th><th>Date Attempted</th><th>Latest Score</th></tr>`;
+            }
+
+            if (quizzes.length === 0) {
+                tableBody.innerHTML = `<tr><td colspan="3" class="text-center text-gray-500">No EOC practice data available for ${subject}.</p></td></tr>`;
+                return;
+            }
+
+            tableBody.innerHTML = quizzes.map(quiz => `
+                <tr class="clickable-row" onclick="window.openEOCQuizQuestionsModal('${quiz.name}', '${subject}')">
+                    <td>${quiz.name}</td>
+                    <td>${window.formatDate(quiz.date)}</td>
+                    <td>${quiz.latestScore}</td>
+                </tr>
+            `).join('');
+        }
+
+        window.populateKhanAcademy = function(subject, khanData) { // Attached to window
+            const container = document.getElementById(`${subject}-khan-data`);
+            if (!container) return;
+
+            if (khanData.length === 0) {
+                container.innerHTML = `<p class="text-center p-4 text-gray-500">No Khan Academy data available for ${subject}.</p>`;
+                return;
+            }
+            container.innerHTML = `<p class="text-center p-4 text-gray-500">Khan Academy data for ${subject} will be displayed here once fetched and transformed.</p>`;
+        }
+
+        const modal = document.getElementById('detailModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalBody = document.getElementById('modalBody');
+
+        window.openSkillIncorrectQuestionsModal = function(skillName, subject) { // Attached to window
+            modalTitle.textContent = `Incorrect Questions for: ${skillName} (${subject.charAt(0).toUpperCase() + subject.slice(1)})`;
+
+            const incorrectQuestions = window.ALL_DASHBOARD_QUESTIONS.filter(q =>
+                q.skill === skillName && !q.isCorrect && q.subject === subject
+            );
+
+            const difficultyOrder = { "Hard": 1, "Medium": 2, "Easy": 3 };
+            incorrectQuestions.sort((a, b) => difficultyOrder[a.difficulty] - difficultyOrder[b.difficulty]);
+
+            if (incorrectQuestions.length === 0) {
+                modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No incorrect questions found for "${skillName}" in ${subject}.</p>`;
+            } else {
+                modalBody.innerHTML = incorrectQuestions.map((q, index) => window.renderQuestionAnalysisCard(q, `skill-${index}`, false)).join('');
+            }
+            modal.style.display = "block";
+            window.renderDynamicCharts();
+            window.addExplanationToggleListeners();
+        }
+
+        window.openTestQuestionsModal = function(testName) { // Attached to window
+            modalTitle.textContent = `Reviewing Test: ${testName}`;
+            const test = window.currentStudentData.cbPracticeTests.find(t => t.name === testName);
+
+            if (!test || !test.questions || test.questions.length === 0) {
+                modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No questions found for ${testName}.</p>`;
+                modal.style.display = "block";
+                return;
+            }
+
+            let content = test.questions.map((q, index) => window.renderQuestionAnalysisCard(q, `test-${index}`, true)).join('');
+
+            if (test.questions.some(q => q.yourTime !== undefined && q.classAvgTime !== undefined)) {
+                content += `<h3 class="text-lg font-semibold text-gray-800 border-t pt-4 mt-6">Pacing Analysis</h3>`;
+                content += `<div class="pacing-bar-chart-container"><canvas id="pacingBarChart"></canvas></div>`;
+
+                const pacingRows = test.questions.map((p, index) => {
+                    const diff = p.yourTime - p.classAvgTime;
+                    const status = diff > 15 ? 'Slower' : diff < -15 ? 'Faster' : 'On Pace';
+                    const statusClass = `pacing-${status.toLowerCase().replace(' ', '-')}`;
+                    return `<tr><td>${index + 1}</td><td>${p.yourTime}s</td><td>${p.classAvgTime}s</td><td><span class="pacing-badge ${statusClass}">${status}</span></td><td class="${p.isCorrect ? 'text-good' : 'text-poor'} font-semibold">${p.isCorrect ? 'Correct' : 'Incorrect'}</td></tr>`;
+                }).join('');
+                content += `<div class="overflow-x-auto mt-4"><table class="min-w-full table"><thead><tr><th>Q#</th><th>Your Time</th><th>Class Avg</th><th>Pacing</th><th>Result</th></tr></thead><tbody>${pacingRows}</tbody></table></div>`;
+            }
+
+            modalBody.innerHTML = content;
+            modal.style.display = "block";
+            window.renderDynamicCharts();
+            window.addExplanationToggleListeners();
+            if (test.questions.some(q => q.yourTime !== undefined)) {
+                window.renderPacingBarChart('pacingBarChart', test.questions);
+            }
+        }
+
+        window.openEOCQuizQuestionsModal = function(quizName, subject) { // Attached to window
+            modalTitle.textContent = `Reviewing EOC Quiz: ${quizName} (${subject.charAt(0).toUpperCase() + subject.slice(1)})`;
+            const quizzesForSubject = window.currentStudentData.eocQuizzes[subject] || [];
+            const quiz = quizzesForSubject.find(q => q.name === quizName);
+
+            if (!quiz || !quiz.questions || quiz.questions.length === 0) {
+                modalBody.innerHTML = `<p class="text-center p-5 text-gray-600">No questions found for ${quizName}.</p>`;
+                modal.style.display = "block";
+                return;
+            }
+
+            let content = quiz.questions.map((q, index) => window.renderQuestionAnalysisCard(q, `eoc-${index}`, false)).join('');
+
+            modalBody.innerHTML = content;
+            modal.style.display = "block";
+            window.renderDynamicCharts();
+            window.addExplanationToggleListeners();
+        }
+
+
+        window.closeModal = function() { // Attached to window
+            const canvases = modalBody.querySelectorAll('canvas');
+            canvases.forEach(canvas => {
+                const chart = Chart.getChart(canvas);
+                if (chart) {
+                    chart.destroy();
+                }
+            });
+
+            modal.style.display = "none";
+            modalBody.innerHTML = '';
+        }
+        window.onclick = (event) => {
+            if (event.target == modal) {
+                window.closeModal();
+            }
+        };
+
+        window.renderQuestionAnalysisCard = function(q, uniqueIdPrefix, includePacing = false) { // Attached to window
+            const resultText = q.isCorrect ? "Correct" : "Incorrect";
+            const resultClass = q.isCorrect ? "text-good" : "text-poor";
+            const sourceInfo = q.source ? `<span class="meta-item text-gray-500">Source: ${q.source}</span>` : '';
+            const questionTextDisplay = q.text ? `<p class="mb-2 text-gray-800 font-medium">${q.text}</p>` : `<p class="mb-2 text-gray-800 font-medium">Question ID: ${q.id}</p>`;
+
+            const pacingHtml = includePacing && q.yourTime !== undefined ?
+                `<p class="text-center text-sm mt-2">Pacing: <strong>${q.yourTime}s</strong> (Class Avg: ${q.classAvgTime}s)</p>` : '';
+
+            const classCorrectPercentage = q.classPerformance ? q.classPerformance.correct : 'N/A';
+
+            const explanationHtml = q.explanation ? `
+                <button class="toggle-explanation-btn" data-target="explanation-${uniqueIdPrefix}-${q.id}">Show Explanation</button>
+                <div id="explanation-${uniqueIdPrefix}-${q.id}" class="answer-explanation">
+                    <p class="font-semibold text-sm">Explanation</p>
+                    <p class="text-sm">${q.explanation}</p>
+                </div>
+            ` : '';
+
+            const relevantChapters = window.getChaptersForSkill(q.skill, q.subject);
+            const chapterReviewHtml = relevantChapters.length > 0 ? `
+                <div class="mt-4 p-3 bg-blue-50 rounded-md border border-blue-200 text-sm">
+                    <p class="font-semibold text-blue-800 mb-1">Review Chapters:</p>
+                    <ul class="list-disc list-inside text-blue-700">
+                        ${relevantChapters.map(chapter => `<li>${chapter}</li>`).join('')}
+                    </ul>
+                </div>
+            ` : '';
+
+            return `
+            <div class="question-analysis-card">
+                <div class="question-analysis-header">
+                    <span class="font-semibold text-gray-700">${q.skill}</span>
+                    <span class="difficulty-badge difficulty-${q.difficulty}">${q.difficulty}</span>
+                    ${sourceInfo}
+                </div>
+                <div class="question-analysis-body">
+                    <div>
+                        ${questionTextDisplay}
+                        <p>Your Answer: <span class="font-semibold ${resultClass}">${q.yourAnswer || 'N/A'}</span> <span class="font-bold">(${resultText})</span></p>
+                        ${!q.isCorrect ? `<p>Correct Answer: <span class="font-semibold text-good">${q.correctAnswer || 'N/A'}</span></p>` : ''}
+                        ${explanationHtml}
+                        ${chapterReviewHtml}
+                    </div>
+                    <div>
+                        <p class="text-center text-sm font-semibold mb-2">Class Performance: ${classCorrectPercentage}% Correct</p>
+                        <div class="question-chart-container">
+                            <canvas id="chart-${uniqueIdPrefix}-${q.id}"></canvas>
+                        </div>
+                        ${pacingHtml}
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        window.getChaptersForSkill = function(skillName, subject) { // Attached to window
+            const chapters = new Set();
+            const skillMap = window.SAT_CHAPTER_SKILL_MAPPING[subject];
+
+            if (skillMap) {
+                for (const mappedSkill in skillMap) {
+                    if (skillName && mappedSkill &&
+                        (skillName.toLowerCase().includes(mappedSkill.toLowerCase()) ||
+                         mappedSkill.toLowerCase().includes(skillName.toLowerCase()))) {
+                        skillMap[mappedSkill].forEach(chapter => chapters.add(chapter));
+                    }
+                }
+            }
+            return Array.from(chapters).sort();
+        }
+
+
+        window.renderDynamicCharts = function() { // Attached to window
+            const canvases = modalBody.querySelectorAll('canvas[id^="chart-"]');
+            canvases.forEach(canvas => {
+                const chartId = canvas.id;
+                const existingChart = Chart.getChart(chartId);
+                if (existingChart) {
+                    existingChart.destroy();
+                }
+
+                const parts = chartId.split('-');
+                const qId = parts.slice(2).join('-');
+
+                const qData = window.ALL_DASHBOARD_QUESTIONS.find(q => q.id === qId);
+
+                if (qData && qData.classPerformance) {
+                    const correct = qData.classPerformance.correct || 0;
+                    const incorrect = qData.classPerformance.incorrect || 0;
+                    const unanswered = qData.classPerformance.unanswered || 0;
+
+                    new Chart(canvas, {
+                        type: 'doughnut',
+                        data: {
+                            labels: ['Correct', 'Incorrect', 'Unanswered'],
+                            datasets: [{
+                                data: [correct, incorrect, unanswered],
+                                backgroundColor: ['#28a745', '#dc3545', '#ffc107'],
+                                borderColor: '#ffffff',
+                                borderWidth: 1
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: true,
+                                    position: 'bottom',
+                                    labels: { boxWidth: 12, font: { size: 10 } }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function(context) {
+                                            let label = context.label || '';
+                                            if (label) { label += ': '; }
+                                            if (context.parsed !== null) { label += context.parsed + '%'; }
+                                            return label;
+                                        }
+                                    }
+                                }
+                            },
+                            cutout: '60%',
+                        }
+                    });
+                }
+            });
+        }
+
+        window.renderPacingBarChart = function(canvasId, questions) { // Attached to window
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+
+            const existingChart = Chart.getChart(canvasId);
+            if (existingChart) {
+                existingChart.destroy();
+            }
+
+            const labels = questions.map((q, index) => `Q${index + 1}`);
+            const yourTimes = questions.map(q => q.yourTime);
+            const classAvgTimes = questions.map(q => q.classAvgTime);
+
+            const backgroundColors = questions.map(q => {
+                const diff = q.yourTime - q.classAvgTime;
+                const avgTimeForCalc = q.classAvgTime > 0 ? q.classAvgTime : 1;
+                if (diff > (avgTimeForCalc * 0.2)) return '#dc3545';
+                if (diff < -(avgTimeForCalc * 0.2)) return '#28a745';
+                return '#4b5266';
+            });
+
+            const borderColors = questions.map(q => {
+                const diff = q.yourTime - q.classAvgTime;
+                const avgTimeForCalc = q.classAvgTime > 0 ? q.classAvgTime : 1;
+                if (diff > (avgTimeForCalc * 0.2)) return '#bb2124';
+                if (diff < -(avgTimeForCalc * 0.2)) return '#198754';
+                return '#2a5266';
+            });
+
+            new Chart(canvas, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Your Time (s)', data: yourTimes, backgroundColor: backgroundColors, borderColor: borderColors, borderWidth: 1, barPercentage: 0.8, categoryPercentage: 0.8 },
+                        { label: 'Class Avg Time (s)', data: classAvgTimes, backgroundColor: 'rgba(117, 117, 117, 0.5)', borderColor: 'rgba(117, 117, 117, 0.8)', borderWidth: 1, type: 'line', fill: false, pointRadius: 3, pointBackgroundColor: '#757575', tension: 0.1, hidden: false }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                title: function(context) { return context[0].label; },
+                                label: function(context) {
+                                    if (context.dataset.label === 'Your Time (s)') {
+                                        const qIndex = context.dataIndex;
+                                        const question = questions[qIndex];
+                                        const difficulty = question ? question.difficulty : 'N/A';
+                                        return `${context.dataset.label}: ${context.parsed.y}s (Difficulty: ${difficulty})`;
+                                    }
+                                    return `${context.dataset.label}: ${context.parsed.y}s`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { title: { display: true, text: 'Question Number' }, grid: { display: false } },
+                        y: { title: { display: true, text: 'Time (seconds)' }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        window.addExplanationToggleListeners = function() { // Attached to window
+            modalBody.querySelectorAll('.toggle-explanation-btn').forEach(button => {
+                button.onclick = function() {
+                    const targetId = this.getAttribute('data-target');
+                    const explanationDiv = document.getElementById(targetId);
+                    if (explanationDiv) {
+                        explanationDiv.classList.toggle('expanded');
+                        this.textContent = explanationDiv.classList.contains('expanded') ? 'Hide Explanation' : 'Show Explanation';
+                    }
+                };
+            });
+        }
+
+        // --- Main Execution Block (Initiated on window load) ---
+        window.onload = function() {
+            console.log("window.onload fired. Initiating dashboard setup.");
+            window.setupEventListeners(); // Set up event listeners first
+            
+            // Initial load for a confirmed StudentGmailID from your data.
+            // This student ('aisha.m@example.com') has data in the main feeds.
+            const studentGmailIdForInitialLoad = "aisha.m@example.com"; 
+            console.log(`Initial dashboard load for student: ${studentGmailIdForInitialLoad}`);
+            window.loadAndProcessData(studentGmailIdForInitialLoad);
+        };
+    </script>
+</body>
+</html>
