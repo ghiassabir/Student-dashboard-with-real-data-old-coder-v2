@@ -137,6 +137,8 @@
         const STUDENT_MAPPING_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRJl8XYak_fAzpuboA6GgOO-hEMd6rP_X9BD7ruZ-pSnIGKkd27uGmP2ZWeBcwSvSKsafObcXDOW080/pub?gid=0&single=true&output=csv'; // Student_Mapping from Phase 2
 
         // --- GLOBAL DATA STORAGE ---
+        // Declare these using 'let' or 'const' ONCE at the very top level of this inline script
+        // and attach functions to `window` for global access.
         let currentStudentData = {};
         let ALL_DASHBOARD_QUESTIONS = [];
 
@@ -310,7 +312,7 @@
             if (!skillTag) return 'unknown';
             const normalizedTag = skillTag.toLowerCase();
 
-            // Check Math skills
+            // Broad keywords to determine subject from SAT_Skill_Tag
             if (normalizedTag.includes("math") ||
                 normalizedTag.includes("algebra") ||
                 normalizedTag.includes("geometry") ||
@@ -324,11 +326,11 @@
                 normalizedTag.includes("statistics") ||
                 normalizedTag.includes("trigonometry") ||
                 normalizedTag.includes("volume") ||
-                normalizedTag.includes("numbers") ||
-                normalizedTag.includes("data analysis")) {
+                normalizedTag.includes("complex numbers") ||
+                normalizedTag.includes("data analysis") ||
+                normalizedTag.includes("word problems")) { // Added word problems
                 return 'math';
             }
-            // Check Writing skills
             if (normalizedTag.includes("writing") ||
                 normalizedTag.includes("grammar") ||
                 normalizedTag.includes("punctuation") ||
@@ -341,10 +343,10 @@
                 normalizedTag.includes("parallel structure") ||
                 normalizedTag.includes("word pairs") ||
                 normalizedTag.includes("question marks") ||
-                normalizedTag.includes("specific focus")) {
+                normalizedTag.includes("effective language") || // From your logs
+                normalizedTag.includes("organization")) { // From your logs
                 return 'writing';
             }
-            // Check Reading skills
             if (normalizedTag.includes("reading") ||
                 normalizedTag.includes("vocabulary in context") ||
                 normalizedTag.includes("central ideas") ||
@@ -356,12 +358,14 @@
                 normalizedTag.includes("command of evidence") ||
                 normalizedTag.includes("graphs") ||
                 normalizedTag.includes("charts") ||
-                normalizedTag.includes("paired passages")) {
+                normalizedTag.includes("paired passages") ||
+                normalizedTag.includes("analyzing multiple texts") || // From your logs
+                normalizedTag.includes("figurative language")) { // From your logs
                 return 'reading';
             }
-            // Fallback if not found
             return 'unknown';
         }
+
 
         // --- MAIN DATA LOADING AND TRANSFORMATION ---
         window.loadAndProcessData = async function(studentIdentifier) {
@@ -398,28 +402,6 @@
                 console.log("Aggregated scores rows:", studentAggregatedScores.length);
                 console.log("Question details rows:", studentQuestionDetails.length);
 
-                // --- CHECK FOR NO DATA AFTER FILTERING ---
-                if (studentAggregatedScores.length === 0 && studentQuestionDetails.length === 0) {
-                     console.warn(`No data found for student Gmail ID ${studentGmailIDForFilter} in aggregated scores or question details. Displaying empty dashboard.`);
-                     // Initialize with empty but valid structure for currentStudentData
-                     window.currentStudentData = {
-                        name: (studentInfo && studentInfo['StudentName_Canvas']) || `Student ${studentIdentifierForFilter}`,
-                        targetScore: (studentInfo && parseInt(studentInfo['StudentTargetScore'])) || 1400,
-                        latestScores: { total: 0, rw: 0, math: 0, avgEocKhan: 0 },
-                        timeSpent: { studentAvg: 0, studentUnit: "min / day", classAvg: 0, classUnit: "min / day"},
-                        scoreTrend: { labels: [], studentScores: [], classAvgScores: [] },
-                        overallSkillPerformance: { labels: ['Reading', 'Writing', 'Math'], studentAccuracy: [0, 0, 0], classAvgAccuracy: [0, 0, 0] },
-                        cbPracticeTests: [],
-                        eocQuizzes: { reading: [], writing: [], math: [] },
-                        khanAcademy: { reading: [], writing: [], math: [] },
-                        skills: { reading: [], writing: [], math: [] },
-                        chapters: STATIC_CHAPTER_LISTS
-                    };
-                     document.getElementById('overview-kpis').innerHTML = `<p class="text-gray-600 text-center col-span-5">No data found for student ${window.currentStudentData.name}.</p>`;
-                     window.populateDashboardUI(); // Render empty dashboard
-                     return; // Exit here if no data
-                }
-
                 // Initialize currentStudentData with default or derived values using found studentInfo
                 window.currentStudentData = {
                     name: (studentInfo && studentInfo['StudentName_Canvas']) || (studentAggregatedScores.length > 0 && studentAggregatedScores[0]['StudentFullName']) || `Student ${studentIdentifierForFilter}`,
@@ -435,6 +417,15 @@
                     chapters: STATIC_CHAPTER_LISTS // Use global STATIC_CHAPTER_LISTS
                 };
 
+                // --- CHECK FOR NO DATA AFTER FILTERING ---
+                if (studentAggregatedScores.length === 0 && studentQuestionDetails.length === 0) {
+                     console.warn(`No data found for student Gmail ID ${studentGmailIDForFilter} in aggregated scores or question details. Displaying empty dashboard.`);
+                     document.getElementById('overview-kpis').innerHTML = `<p class="text-gray-600 text-center col-span-5">No data found for student ${window.currentStudentData.name}.</p>`;
+                     window.populateDashboardUI(); // Render empty dashboard
+                     return; // Exit here if no data
+                }
+
+                // --- Populate currentStudentData.latestScores, scoreTrend, timeSpent from Aggregated Scores ---
                 const latestTest = studentAggregatedScores
                     .filter(row => row['Assessment Type'] === 'CB Practice Test' && row['ScaledScore_Total'] && row['AttemptDate'])
                     .sort((a, b) => new Date(b['AttemptDate']) - new Date(a['AttemptDate']))[0];
@@ -444,7 +435,7 @@
                     window.currentStudentData.latestScores.rw = parseInt(latestTest['ScaledScore_RW']) || 0;
                     window.currentStudentData.latestScores.math = parseInt(latestTest['ScaledScore_Math']) || 0;
                     const avgEocKhanRow = studentAggregatedScores.find(row => row['Assessment Type'] === 'Overall Average');
-                    if (avgEocKhanRow && avgEocKhanRow['Avg EOC/Khan Score']) {
+                    if (avgEocKhanRow && avgEocKhanRow['Avg EOC/Khan Score']) { // Column name needs to be confirmed
                          window.currentStudentData.latestScores.avgEocKhan = parseFloat(avgEocKhanRow['Avg EOC/Khan Score']) || 0;
                     } else {
                         const allEocScores = Object.values(window.currentStudentData.eocQuizzes).flat().map(q => {
@@ -487,22 +478,21 @@
 
                 studentQuestionDetails.forEach(qRow => {
                     // Robustly derive essential data, using fallbacks if needed
-                    const questionId = (qRow['Question ID'] && String(qRow['Question ID'])) || `${qRow['AssessmentName']}-${qRow['QuestionSequenceInQuiz']}`;
+                    const questionId = (qRow['Question ID'] && String(qRow['Question ID'])) || `${qRow['AssessmentName']}-${qRow['QuestionSequenceInQuiz']}`; // Construct ID if missing or null
                     const rawSkillTag = qRow['SAT Skill Tag']; // Get the SAT Skill Tag
                     const subject = window.getSubjectFromSkillTag(rawSkillTag); // Use the new robust function
                     const skill = rawSkillTag || 'Unknown Skill';
                     
-                    // Skip row ONLY if core identifying data (questionId, subject, skill) cannot be determined
+                    // Skip row ONLY if core identifying data (questionId, subject, or skill) cannot be determined
                     if (!questionId || subject === 'unknown' || skill === 'Unknown Skill') {
                          console.warn("Skipping question row due to unidentifiable essential data:", qRow);
-                         return;
+                         return; // Skip if basic info is unrecoverable
                     }
 
-
                     const difficulty = qRow['Difficulty'] || 'Unknown';
-                    const yourAnswer = String(qRow['Student Answer']) || 'N/A'; // Ensure string
+                    const yourAnswer = String(qRow['Student Answer']) || 'N/A';
                     const correctAnswer = String(qRow['Correct Answer']) || (qRow.IsCorrect === true ? yourAnswer : 'N/A');
-                    const isCorrect = (qRow.IsCorrect === true);
+                    const isCorrect = (qRow.IsCorrect === true); // Ensure boolean (PapaParse dynamicTyping helps here)
                     const explanation = qRow['Explanation'] || 'No explanation available.';
                     const yourTime = parseFloat(qRow['TimeSpentOnQuestion_Seconds']) || 0;
                     const classAvgTime = parseFloat(qRow['ClassAverageTime_Question_Seconds']) || 0;
@@ -994,7 +984,7 @@
             if (!container) return;
 
             if (khanData.length === 0) {
-                container.innerHTML = `<p class="text-gray-500 text-center p-4">No Khan Academy data available for ${subject}.</p>`;
+                container.innerHTML = `<p class="text-center p-4 text-gray-500">No Khan Academy data available for ${subject}.</p>`;
                 return;
             }
             container.innerHTML = `<p class="text-center p-4 text-gray-500">Khan Academy data for ${subject} will be displayed here once fetched and transformed.</p>`;
